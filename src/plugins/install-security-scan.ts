@@ -10,7 +10,10 @@ export type {
   InstallPolicyWarning,
   InstallSafetyOverrides,
 } from "./install-security-scan.types.js";
-export { buildInstallPolicyAcknowledgementOptions } from "./install-security-scan.types.js";
+export {
+  buildInstallPolicyAcknowledgementOptions,
+  formatInstallPolicyWarningReasonForTerminal,
+} from "./install-security-scan.types.js";
 import type {
   InstallSecurityScanResult,
   InstallSafetyOverrides,

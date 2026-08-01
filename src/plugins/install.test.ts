@@ -2033,7 +2033,7 @@ describe("installPluginFromArchive", () => {
     const { pluginDir, extensionsDir } = setupPluginInstallDirs();
     writeMinimalPackagePlugin(pluginDir, "dependency-warning-plugin");
     const warning = {
-      reason: "Manual review recommended.",
+      reason: "Manual \u001b[31mreview\u001b[0m\nrecommended.",
       findings: [
         {
           ruleId: "dangerous-exec",
@@ -2051,7 +2051,7 @@ describe("installPluginFromArchive", () => {
 
       expect(result).toEqual({
         ok: false,
-        error: warning.reason,
+        error: "Manual review\\nrecommended.",
         code: PLUGIN_INSTALL_ERROR_CODE.INSTALL_POLICY_ACKNOWLEDGEMENT_REQUIRED,
         installPolicyWarning: warning,
       });

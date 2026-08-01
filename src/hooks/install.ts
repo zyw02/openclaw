@@ -8,6 +8,7 @@ import type { NpmIntegrityDrift, NpmSpecResolution } from "../infra/install-sour
 import { readRegularFile } from "../infra/regular-file.js";
 import { detectBundleManifestFormat } from "../plugins/bundle-manifest.js";
 import {
+  formatInstallPolicyWarningReasonForTerminal,
   scanPackageInstallSource,
   scanInstalledPackageDependencyTree,
   type InstallPolicyWarning,
@@ -129,7 +130,7 @@ async function runHookInstallScan(params: {
     if (result.warning) {
       return {
         ok: false,
-        error: result.warning.reason,
+        error: formatInstallPolicyWarningReasonForTerminal(result.warning),
         code: "install_policy_acknowledgement_required",
         installPolicyWarning: result.warning,
       };

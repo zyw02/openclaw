@@ -2176,6 +2176,25 @@ describe("plugins cli install", () => {
     expect(runtimeErrors.at(-1)).not.toContain("Also not a valid hook pack");
   });
 
+  it("prints the terminal-safe error without leaking raw structured warning controls", async () => {
+    loadConfig.mockReturnValue({} as OpenClawConfig);
+    const reason = "manual \u001b[31mreview\u001b[0m\nrequired";
+    installPluginFromNpmSpec.mockResolvedValue({
+      ok: false,
+      error: "manual review\\nrequired",
+      code: "install_policy_acknowledgement_required",
+      installPolicyWarning: { reason },
+    });
+
+    await expect(
+      runAcknowledgedPluginsInstallCommand(["plugins", "install", "npm:demo"]),
+    ).rejects.toThrow("__exit__:1");
+
+    expect(runtimeErrors.at(-1)).toBe("manual review\\nrequired");
+    expect(runtimeErrors.join("\n")).not.toContain("\u001b");
+    expect(runtimeErrors.join("\n")).not.toContain(reason);
+  });
+
   it("keeps actionable hook-pack fallback details", async () => {
     loadConfig.mockReturnValue({} as OpenClawConfig);
     installPluginFromNpmSpec.mockResolvedValue({

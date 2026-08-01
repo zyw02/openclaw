@@ -39,7 +39,8 @@ vi.mock("../../agents/agent-scope.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../../plugins/install-security-scan.js", () => ({
+vi.mock("../../plugins/install-security-scan.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../plugins/install-security-scan.js")>()),
   evaluateSkillInstallPolicy: installSecurityScanState.evaluateSkillInstallPolicy,
 }));
 

@@ -117,7 +117,7 @@ process.stdin.on("end", () => {
   process.stdout.write(JSON.stringify({
     protocolVersion: 1,
     decision,
-    reason: decision === "warn" ? "skill review required" : "skill blocked on re-evaluation",
+    reason: decision === "warn" ? "skill \\u001b[31mreview\\u001b[0m\\nrequired" : "skill blocked on re-evaluation",
     findings: [{
       ruleId: "proof.skill",
       severity: decision === "warn" ? "warn" : "critical",
@@ -377,9 +377,9 @@ describe("installSkill before_install hooks", () => {
 
       expect(first).toMatchObject({
         ok: false,
-        message: "skill review required",
+        message: "skill review\\nrequired",
         installPolicyWarning: {
-          reason: "skill review required",
+          reason: "skill \u001b[31mreview\u001b[0m\nrequired",
           findings: [
             {
               ruleId: "proof.skill",

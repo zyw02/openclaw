@@ -342,7 +342,7 @@ describe("skills-clawhub", () => {
 
   it("does not persist warned ClawHub installs before acknowledgement and keeps reevaluated blocks terminal", async () => {
     const warning = {
-      reason: "ClawHub source review required",
+      reason: "ClawHub source \u001b[31mreview\u001b[0m\nrequired",
       findings: [
         {
           ruleId: "proof.clawhub",
@@ -360,7 +360,7 @@ describe("skills-clawhub", () => {
 
     expect(first).toMatchObject({
       ok: false,
-      error: warning.reason,
+      error: "ClawHub source review\\nrequired",
       installPolicyWarning: warning,
     });
     expect(installPackageDirMock).not.toHaveBeenCalled();

@@ -9,6 +9,7 @@ import { installPackageDir } from "../../infra/install-package-dir.js";
 import { resolveSafeInstallDir } from "../../infra/install-safe-path.js";
 import {
   evaluateSkillInstallPolicy,
+  formatInstallPolicyWarningReasonForTerminal,
   type InstallPolicyWarning,
   type InstallSecurityScanResult,
 } from "../../plugins/install-security-scan.js";
@@ -224,7 +225,7 @@ export async function installExtractedSkillRoot(params: {
       }
       if (scanResult?.warning) {
         return installFailure(
-          scanResult.warning.reason,
+          formatInstallPolicyWarningReasonForTerminal(scanResult.warning),
           "acknowledgement-required",
           scanResult.warning,
         );

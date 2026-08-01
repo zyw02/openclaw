@@ -4,7 +4,10 @@ import type { InstallPolicySource } from "../security/install-policy.js";
 import { createLazyImportLoader } from "../shared/lazy-promise.js";
 import { resolveUserPath } from "../utils.js";
 import { resolveDefaultPluginExtensionsDir } from "./install-paths.js";
-import type { InstallSecurityScanResult } from "./install-security-scan.js";
+import {
+  formatInstallPolicyWarningReasonForTerminal,
+  type InstallSecurityScanResult,
+} from "./install-security-scan.js";
 import {
   PLUGIN_INSTALL_ERROR_CODE,
   type InstallPluginResult,
@@ -227,7 +230,7 @@ function buildInstallPolicyWarningResult(params: {
 }): Extract<InstallPluginResult, { ok: false }> {
   return {
     ok: false,
-    error: params.warning.reason,
+    error: formatInstallPolicyWarningReasonForTerminal(params.warning),
     code: PLUGIN_INSTALL_ERROR_CODE.INSTALL_POLICY_ACKNOWLEDGEMENT_REQUIRED,
     installPolicyWarning: params.warning,
   };

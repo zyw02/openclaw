@@ -1,8 +1,13 @@
 // Defines plugin install security scan result types.
 import type { InstallPolicyWarningDetails } from "../../packages/gateway-protocol/src/install-policy-warning-details.js";
+import { sanitizeTerminalText } from "../../packages/terminal-core/src/safe-text.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 
 export type InstallPolicyWarning = InstallPolicyWarningDetails["installPolicyWarning"];
+
+export function formatInstallPolicyWarningReasonForTerminal(warning: InstallPolicyWarning): string {
+  return sanitizeTerminalText(warning.reason);
+}
 
 /** Result returned by plugin/skill install security policy checks. */
 export type InstallSecurityScanResult =

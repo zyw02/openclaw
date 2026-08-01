@@ -8,6 +8,7 @@ import { isContainerEnvironment as defaultIsContainerEnvironment } from "../../i
 import { formatErrorMessage } from "../../infra/errors.js";
 import {
   evaluateSkillInstallPolicy,
+  formatInstallPolicyWarningReasonForTerminal,
   type InstallPolicyWarning,
   type SkillInstallSpecMetadata,
 } from "../../plugins/install-security-scan.js";
@@ -739,7 +740,7 @@ export async function installSkill(params: SkillInstallRequest): Promise<SkillIn
     return withWarnings(
       {
         ok: false,
-        message: scanResult.warning.reason,
+        message: formatInstallPolicyWarningReasonForTerminal(scanResult.warning),
         stdout: "",
         stderr: "",
         code: null,

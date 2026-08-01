@@ -24,7 +24,8 @@ vi.mock("../process/exec.js", () => ({
   runCommandWithTimeout: (...args: unknown[]) => runCommandWithTimeoutMock(...args),
 }));
 
-vi.mock("../plugins/install-security-scan.js", () => ({
+vi.mock("../plugins/install-security-scan.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../plugins/install-security-scan.js")>()),
   scanPackageInstallSource: (...args: unknown[]) => scanPackageInstallSourceMock(...args),
   scanInstalledPackageDependencyTree: (...args: unknown[]) =>
     scanInstalledPackageDependencyTreeMock(...args),
@@ -793,7 +794,7 @@ describe("installHooksFromPath", () => {
     });
     const hooksDir = path.join(stateDir, "hooks");
     const warning = {
-      reason: "Manual review recommended.",
+      reason: "Manual \u001b[31mreview\u001b[0m\nrecommended.",
       findings: [
         {
           ruleId: "dangerous-exec",
@@ -806,7 +807,7 @@ describe("installHooksFromPath", () => {
     expect(await installHooksFromPath({ path: pkgDir, hooksDir })).toEqual({
       ok: false,
       code: "install_policy_acknowledgement_required",
-      error: warning.reason,
+      error: "Manual review\\nrecommended.",
       installPolicyWarning: warning,
     });
     expect(fs.existsSync(path.join(hooksDir, "canonical-hooks"))).toBe(false);
