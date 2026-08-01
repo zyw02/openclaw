@@ -16,6 +16,7 @@ import {
   withOwnedSessionTranscriptWrites,
 } from "../config/sessions/transcript-write-context.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import type { GatewayRecoveryRuntime } from "../gateway/server-instance-runtime.types.js";
 import type { AgentEventPayload } from "../infra/agent-events.js";
 import {
   getActiveGatewayRootWorkCount,
@@ -47,7 +48,6 @@ import {
   createSessionStore,
   createSubagentRunParams,
   createSubagentRunRecord,
-  expectRecord,
   expectRecordFields,
   mockGatewayMethods,
   mockCallArg as getMockCallArg,
@@ -190,12 +190,12 @@ const mocks = vi.hoisted(() => ({
   runSubagentEnded: vi.fn(async () => {}),
   removeInternalSessionEffectsSession: vi.fn(async () => {}),
   resolveAgentTimeoutMs: vi.fn(() => 1_000),
+  dispatchRecoveryAgent: vi.fn(async () => ({ runId: "recovered-run" })),
   getGatewayRecoveryRuntime: vi.fn(() => ({
-    dispatchAgent: vi.fn(),
+    dispatchAgent: mocks.dispatchRecoveryAgent as GatewayRecoveryRuntime["dispatchAgent"],
     waitForAgent: vi.fn(),
     sendRecoveryNotice: vi.fn(),
   })),
-  scheduleOrphanRecovery: vi.fn(),
 }));
 
 vi.mock("../gateway/call.js", () => ({
@@ -270,10 +270,6 @@ vi.mock("./timeout.js", () => ({
   resolveAgentTimeoutMs: mocks.resolveAgentTimeoutMs,
 }));
 
-vi.mock("./subagent-orphan-recovery.js", () => ({
-  scheduleOrphanRecovery: mocks.scheduleOrphanRecovery,
-}));
-
 vi.mock("./internal-session-effects.js", () => ({
   removeInternalSessionEffectsSession: mocks.removeInternalSessionEffectsSession,
 }));
@@ -337,7 +333,7 @@ describe("subagent registry seam flow", () => {
     mocks.resolveContextEngine.mockResolvedValue({
       onSubagentEnded: mocks.onSubagentEnded,
     });
-    mocks.scheduleOrphanRecovery.mockReset();
+    mocks.dispatchRecoveryAgent.mockReset().mockResolvedValue({ runId: "recovered-run" });
     mocks.resolveAgentTimeoutMs.mockReturnValue(1_000);
     mocks.restoreSubagentRunsFromDisk.mockReturnValue(0);
     mocks.getSubagentRunsSnapshotForChildSession
@@ -1628,7 +1624,7 @@ describe("subagent registry seam flow", () => {
     );
   });
 
-  it("schedules orphan recovery instead of terminally failing on recoverable wait transport errors", async () => {
+  it("keeps runs active instead of terminally failing on recoverable wait transport errors", async () => {
     mockGatewayMethods(mocks.callGateway, {
       "agent.wait": new Error("gateway closed (1006): transport close"),
     });
@@ -1638,13 +1634,7 @@ describe("subagent registry seam flow", () => {
       task: "resume after transport close",
     });
 
-    await waitForFast(() => {
-      expectRecordFields(
-        getMockCallArg(mocks.scheduleOrphanRecovery, 0, 0, "orphan recovery"),
-        { delayMs: 1_000 },
-        "orphan recovery params",
-      );
-    });
+    await waitForFast(() => expect(findRequesterRun("run-interrupted-wait")).toBeDefined());
     expect(mocks.runSubagentAnnounceFlow).not.toHaveBeenCalled();
     const run = findRequesterRun("run-interrupted-wait");
     expect(run?.execution.endedAt).toBeUndefined();
@@ -1713,44 +1703,10 @@ describe("subagent registry seam flow", () => {
       getGatewayRecoveryRuntime: () => undefined,
     });
 
-    mod.scheduleSubagentOrphanRecovery({ delayMs: 1 });
-    await Promise.resolve();
+    mod.scheduleSubagentRegistrySweep({ delayMs: 1 });
+    await vi.advanceTimersByTimeAsync(1);
 
-    expect(mocks.scheduleOrphanRecovery).not.toHaveBeenCalled();
-  });
-
-  it("keeps a debounced recovery bound to the current Gateway runtime", async () => {
-    const originalImplementation = mocks.getGatewayRecoveryRuntime.getMockImplementation();
-    const firstRuntime = {
-      dispatchAgent: vi.fn(),
-      waitForAgent: vi.fn(),
-      sendRecoveryNotice: vi.fn(),
-    };
-    const replacementRuntime = {
-      dispatchAgent: vi.fn(),
-      waitForAgent: vi.fn(),
-      sendRecoveryNotice: vi.fn(),
-    };
-    mocks.getGatewayRecoveryRuntime.mockReturnValue(firstRuntime);
-
-    try {
-      mod.scheduleSubagentOrphanRecovery({ delayMs: 1 });
-      await waitForFast(() => expect(mocks.scheduleOrphanRecovery).toHaveBeenCalledOnce());
-      const scheduled = expectRecord(
-        getMockCallArg(mocks.scheduleOrphanRecovery, 0, 0, "orphan recovery"),
-        "orphan recovery params",
-      );
-      const getGatewayRuntime = scheduled.getGatewayRuntime;
-      expect(typeof getGatewayRuntime).toBe("function");
-
-      mocks.getGatewayRecoveryRuntime.mockReturnValue(replacementRuntime);
-      mod.scheduleSubagentOrphanRecovery({ delayMs: 1 });
-
-      expect(mocks.scheduleOrphanRecovery).toHaveBeenCalledOnce();
-      expect((getGatewayRuntime as () => unknown)()).toBe(replacementRuntime);
-    } finally {
-      mocks.getGatewayRecoveryRuntime.mockImplementation(originalImplementation!);
-    }
+    expect(mocks.dispatchRecoveryAgent).not.toHaveBeenCalled();
   });
 
   it("keeps parent run active when agent.wait times out before child session settles", async () => {
@@ -4536,7 +4492,7 @@ describe("subagent registry seam flow", () => {
     expect(mocks.runSubagentAnnounceFlow).toHaveBeenCalledTimes(1);
   });
 
-  it("requeues orphan recovery instead of keeping restart-aborted stale runs stuck as running", async () => {
+  it("keeps restart-aborted runs active while recovery dependencies are unavailable", async () => {
     mockGatewayMethods(mocks.callGateway, {
       "agent.wait": { status: "pending" },
     });
@@ -4556,13 +4512,7 @@ describe("subagent registry seam flow", () => {
     vi.setSystemTime(new Date("2026-03-24T12:02:00Z"));
     await mod.testing.sweepOnceForTests();
 
-    await waitForFast(() => {
-      expectRecordFields(
-        getMockCallArg(mocks.scheduleOrphanRecovery, 0, 0, "orphan recovery"),
-        { delayMs: 1_000 },
-        "orphan recovery params",
-      );
-    });
+    expect(mocks.dispatchRecoveryAgent).not.toHaveBeenCalled();
     expect(mocks.runSubagentAnnounceFlow).not.toHaveBeenCalled();
     const run = findRequesterRun("run-stale-aborted");
     expect(run?.execution.endedAt).toBeUndefined();
@@ -6307,7 +6257,7 @@ describe("subagent registry seam flow", () => {
     expect(mocks.persistSubagentRunsToDisk).toHaveBeenCalled();
   });
 
-  it("contains background sweeper failures while direct sweeps stay observable", async () => {
+  it("contains per-row and background sweeper failures", async () => {
     mod.registerSubagentRun({
       runId: "run-sweep-error",
       task: "sweep error",
@@ -6320,7 +6270,7 @@ describe("subagent registry seam flow", () => {
       throw new Error("simulated sweep failure");
     });
 
-    await expect(mod.testing.sweepOnceForTests()).rejects.toThrow("simulated sweep failure");
+    await expect(mod.testing.sweepOnceForTests()).resolves.toBeUndefined();
     await expect(mod.testing.runSweeperTickForTests()).resolves.toBeUndefined();
   });
 });

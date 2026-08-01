@@ -1,4 +1,3 @@
-import { isFastTestRuntimeEnv } from "../infra/env.js";
 import { removeInternalSessionEffectsSession } from "./internal-session-effects.js";
 import {
   SUBAGENT_ENDED_OUTCOME_KILLED,
@@ -45,26 +44,26 @@ export function createSubagentRegistryContextCleanup(config: {
     await engine.onSubagentEnded?.(params);
   }
 
-  async function notifyContextEngineSubagentEnded(
+  async function tryContextEngineSubagentEnded(
     params: ContextEngineSubagentEndedParams,
-  ): Promise<void> {
-    try {
-      await runContextEngineSubagentEnded(params);
-    } catch (err) {
-      warn("context-engine onSubagentEnded failed (best-effort)", { err });
-    }
-  }
-
-  async function finishCollectorContextEngineCleanup(
-    params: ContextEngineSubagentEndedParams,
+    warning: string,
   ): Promise<boolean> {
     try {
       await runContextEngineSubagentEnded(params);
       return true;
     } catch (err) {
-      warn("context-engine collector cleanup failed", { err });
+      warn(warning, { err });
       return false;
     }
+  }
+
+  async function notifyContextEngineSubagentEnded(
+    params: ContextEngineSubagentEndedParams,
+  ): Promise<void> {
+    await tryContextEngineSubagentEnded(
+      params,
+      "context-engine onSubagentEnded failed (best-effort)",
+    );
   }
 
   async function cleanupCollectorLaunchResources(entry: SubagentRunRecord): Promise<boolean> {
@@ -84,12 +83,15 @@ export function createSubagentRegistryContextCleanup(config: {
       safeRemoveAttachmentsDir(entry),
       contextAlreadyEnded
         ? true
-        : finishCollectorContextEngineCleanup({
-            childSessionKey: entry.childSessionKey,
-            reason: "deleted",
-            agentDir: entry.agentDir,
-            workspaceDir: entry.workspaceDir,
-          }),
+        : tryContextEngineSubagentEnded(
+            {
+              childSessionKey: entry.childSessionKey,
+              reason: "deleted",
+              agentDir: entry.agentDir,
+              workspaceDir: entry.workspaceDir,
+            },
+            "context-engine collector cleanup failed",
+          ),
     ]);
     if (!contextAlreadyEnded && contextEnded) {
       entry.contextEngineCleanupCompletedAt = Date.now();
@@ -98,62 +100,11 @@ export function createSubagentRegistryContextCleanup(config: {
     return internalEffectsRemoved && attachmentsRemoved && contextEnded;
   }
 
-  async function terminateAcceptedRestoredCollectorRun(params: {
-    entry: SubagentRunRecord;
-    gatewayRunId: string;
-    timeoutMs: number;
-  }): Promise<void> {
-    // A restored FIFO slot cannot be released until the accepted Gateway run is
-    // definitely stopped; otherwise the group can exceed maxConcurrent.
-    for (;;) {
-      try {
-        await deps().callGateway({
-          method: "chat.abort",
-          params: { sessionKey: params.entry.childSessionKey, runId: params.gatewayRunId },
-          timeoutMs: params.timeoutMs,
-        });
-        return;
-      } catch {
-        try {
-          await deps().callGateway({
-            method: "sessions.delete",
-            params: {
-              key: params.entry.childSessionKey,
-              deleteTranscript: true,
-              emitLifecycleHooks: false,
-            },
-            timeoutMs: params.timeoutMs,
-          });
-          return;
-        } catch {
-          await new Promise<void>((resolve) => {
-            const timer = setTimeout(resolve, isFastTestRuntimeEnv() ? 1 : 1_000);
-            timer.unref?.();
-          });
-        }
-      }
-    }
-  }
-
-  function suppressAnnounceForSteerRestart(entry?: SubagentRunRecord) {
-    return entry?.suppressAnnounceReason === "steer-restart";
-  }
-
-  function shouldKeepThreadBindingAfterRun(params: {
-    entry: SubagentRunRecord;
-    reason: SubagentLifecycleEndedReason;
-  }) {
-    if (params.reason === SUBAGENT_ENDED_REASON_KILLED) {
-      return false;
-    }
-    return params.entry.spawnMode === "session";
-  }
-
   function shouldEmitEndedHookForRun(params: {
     entry: SubagentRunRecord;
     reason: SubagentLifecycleEndedReason;
   }) {
-    return !shouldKeepThreadBindingAfterRun(params);
+    return params.reason === SUBAGENT_ENDED_REASON_KILLED || params.entry.spawnMode !== "session";
   }
 
   async function emitSubagentEndedHookForRun(params: {
@@ -179,21 +130,19 @@ export function createSubagentRegistryContextCleanup(config: {
     // event from the canonical row only after that boundary so an older callback
     // cannot claim the exactly-once hook with a superseded timeout or error.
     const reason = params.entry.endedReason ?? params.reason ?? SUBAGENT_ENDED_REASON_COMPLETE;
-    const outcome =
-      reason === SUBAGENT_ENDED_REASON_KILLED
-        ? SUBAGENT_ENDED_OUTCOME_KILLED
-        : resolveLifecycleOutcomeFromRunOutcome(params.entry.execution.outcome);
-    const error =
-      params.entry.execution.outcome?.status === "error"
-        ? params.entry.execution.outcome.error
-        : undefined;
     await emitSubagentEndedHookOnce({
       entry: params.entry,
       reason,
       sendFarewell: params.sendFarewell,
       accountId: params.accountId ?? params.entry.requesterOrigin?.accountId,
-      outcome,
-      error,
+      outcome:
+        reason === SUBAGENT_ENDED_REASON_KILLED
+          ? SUBAGENT_ENDED_OUTCOME_KILLED
+          : resolveLifecycleOutcomeFromRunOutcome(params.entry.execution.outcome),
+      error:
+        params.entry.execution.outcome?.status === "error"
+          ? params.entry.execution.outcome.error
+          : undefined,
       inFlightRunIds: endedHookInFlightRunIds,
       persist,
     });
@@ -203,8 +152,8 @@ export function createSubagentRegistryContextCleanup(config: {
     runContextEngineSubagentEnded,
     notifyContextEngineSubagentEnded,
     cleanupCollectorLaunchResources,
-    terminateAcceptedRestoredCollectorRun,
-    suppressAnnounceForSteerRestart,
+    suppressAnnounceForSteerRestart: (entry?: SubagentRunRecord) =>
+      entry?.suppressAnnounceReason === "steer-restart",
     shouldEmitEndedHookForRun,
     emitSubagentEndedHookForRun,
     reset: () => endedHookInFlightRunIds.clear(),
