@@ -18,27 +18,27 @@ runtime dependencies, or scanner registrations.
 
 ## Verified result
 
-The 2026-07-31 proof used:
+The 2026-08-01 proof used:
 
-- OpenClaw PR branch head `2c86481a3c6f20fd4a759c26478a07de23456146`
-  before the proof-only follow-up edits.
+- OpenClaw runtime commit `10ccce25db8f3eaf7c506ed95998297ab7c314ae`
+  before the evidence-only follow-up edit to this document.
 - ClawScan adapter commit
   `e63bacb73e8ede8a166dd0d61267bdb07596972a`, with
   `13c6cb59b58176b6ed23f0514d5bca095f715eda` immediately below it.
 - A native arm64 ClawScan binary at
-  `/private/tmp/openclaw-install-policy-proof.LKVUmy/bin/clawscan`, SHA-256
-  `94c47f061abd9ab101b083dba9dff88bb5c62406608b889ee874e5e0574c5fd3`.
+  `/private/tmp/openclaw-install-policy-proof.ikuMIP/bin/clawscan`, SHA-256
+  `b77644f53b4466e2cc316ebe30cdabd9bfae10a63ff82751cfb5d60d7c1d83ca`.
 - Node.js `25.9.0`, Docker client `29.6.2`, and Docker server `29.6.1`.
 
 Observed lifecycle behavior:
 
-| Case                                                  | Policy result                                | OpenClaw result                                                                                  |
-| ----------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Benign local skill and plugin                         | `allow`                                      | Both installed                                                                                   |
-| Prompt-injection plugin, no acknowledgement           | `warn`                                       | Warning and finding shown; nonzero exit; config unchanged; staged npm root removed               |
-| Same plugin with `--dangerously-force-unsafe-install` | `warn` at package and dependency-tree stages | Both stages re-evaluated; plugin and dependency installed; config committed                      |
-| Destructive skill with the same flag                  | `block`                                      | Nonzero exit; no target committed                                                                |
-| Interactive Semgrep warning                           | `warn`                                       | Prompt shown; target absent while waiting; `y` triggered policy re-evaluation and then installed |
+| Case                                                  | Policy result                                | OpenClaw result                                                                                                   |
+| ----------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Benign local skill and plugin                         | `allow`                                      | Both installed                                                                                                    |
+| Prompt-injection plugin, no acknowledgement           | `warn`                                       | Warning and finding shown; nonzero exit; config unchanged; staged npm root removed                                |
+| Same plugin with `--dangerously-force-unsafe-install` | `warn` at package and dependency-tree stages | Both stages re-evaluated; plugin and dependency installed; config committed                                       |
+| Destructive skill with the same flag                  | `block`                                      | Nonzero exit; no target committed                                                                                 |
+| Interactive prompt-injection plugin                   | `warn` at package and dependency-tree stages | Each stage paused before commit; each `y` triggered policy re-evaluation; install followed second acknowledgement |
 
 The multi-stage npm proof output included two separate warning pairs before
 commit:
@@ -51,20 +51,31 @@ Install policy warning: ClawScan gate reported warnings for the staged installat
 Installed plugin: policy-proof-plugin
 ```
 
-The interactive prompt was:
+The interactive prompt at each npm stage was:
 
 ```text
 Install after this policy warning?
 ClawScan gate reported warnings for the staged installation
-• [WARN · proof-semgrep.dynamic-eval-warning] proof-semgrep fired rule dynamic-eval-warning
-  ↳ results[] [y/N]
+• [WARN · clawscan-static.prompt-injection-warning] clawscan-static fired rule prompt-injection-warning
+  ↳ findings[].id="static.prompt_injection" [y/N]
 ```
 
-While this prompt was waiting,
-`/private/tmp/openclaw-install-policy-proof.LKVUmy/workspace/skills/byos-interactive-warn`
-did not exist. The policy runtime's focused test also asserts two policy calls
-for an accepted interactive warning and proves that a new `block` on the
-second call remains terminal.
+While both prompts were waiting, the config remained byte-identical to its
+pre-install value, no plugin config entry existed, and no activated plugin
+target existed. After the first `y`, OpenClaw re-evaluated the installed
+dependency tree and paused at the second warning. Only the second `y` allowed
+the install and config commit. The policy runtime's focused test also proves
+that a new `block` on re-evaluation remains terminal.
+
+A direct adapter invocation emitted exactly one newline-terminated protocol-v1
+JSON response on stdout and no diagnostics on stdout. The response was
+`decision: "warn"` with the Semgrep rule in bounded findings; stderr was empty
+for that successful invocation.
+
+The BYOS composition completed both Semgrep and TruffleHog for all three
+fixtures. ClawScan mapped them to deterministic `pass`, `warn`, and `block`
+gates, and OpenClaw then reproduced `allow`, acknowledged `warn`, and terminal
+`block` behavior without knowing either scanner identity.
 
 ## Prerequisites
 
@@ -287,7 +298,7 @@ The verified image used:
 - base:
   `ghcr.io/trufflesecurity/trufflehog@sha256:59b244249d1a1aef4baa24fe73d3c931616264482580d806d77f6c74d26b3e42`;
 - local combined image ID:
-  `sha256:a2adee1ba25e8663ab4f8c1706c60533c1ccdba32022af584215ba8ff4f83f9b`;
+  `sha256:39251e78900dfb8b7c9da9284995eed5b966e2a3e3f49d22b7f16302d3c0ca3c`;
 - Semgrep `1.170.0`;
 - TruffleHog `3.95.9`;
 - Python `3.12.13`.

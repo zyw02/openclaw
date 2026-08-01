@@ -1702,5 +1702,9 @@
   {
     "source": "Automations (cron)",
     "target": "自动化 (cron)"
+  },
+  {
+    "source": "Install policy manual proof",
+    "target": "安装策略手动验证"
   }
 ]
