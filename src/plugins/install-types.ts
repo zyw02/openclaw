@@ -28,6 +28,7 @@ export const PLUGIN_INSTALL_ERROR_CODE = {
   NPM_METADATA_FAILURE: "npm_metadata_failure",
   NPM_PACKAGE_NOT_FOUND: "npm_package_not_found",
   PLUGIN_ID_MISMATCH: "plugin_id_mismatch",
+  INSTALL_ROLLBACK_FAILED: "install_rollback_failed",
   INSTALL_POLICY_ACKNOWLEDGEMENT_REQUIRED: "install_policy_acknowledgement_required",
   SECURITY_SCAN_BLOCKED: "security_scan_blocked",
   SECURITY_SCAN_FAILED: "security_scan_failed",

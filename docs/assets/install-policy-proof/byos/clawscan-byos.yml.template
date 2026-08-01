@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=__PROOF_ROOT__/clawscan/schemas/clawscan.schema.json
+version: 1
+
+profiles:
+  byos-install-policy:
+    sandbox:
+      image: openclaw-policy-proof-scanners:semgrep-1.170.0-trufflehog-3.95.9
+      mounts:
+        - __PROOF_ROOT__/byos
+    scanners:
+      - id: proof-semgrep
+        command: >-
+          semgrep scan
+          --config __PROOF_ROOT__/byos/semgrep-rules.yml
+          --json
+          --metrics=off
+          --disable-version-check
+          {{target}}
+        targets:
+          - skill
+          - plugin
+        gate:
+          rules:
+            - id: dynamic-eval-warning
+              path: results[]
+              exists: true
+              action: warn
+      - id: proof-trufflehog
+        command: >-
+          python3 __PROOF_ROOT__/byos/trufflehog-json.py
+          {{target}}
+        targets:
+          - skill
+          - plugin
+        gate:
+          rules:
+            - id: detected-secret-block
+              path: findings[]
+              exists: true
+              action: block

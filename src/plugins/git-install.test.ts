@@ -405,6 +405,64 @@ describe("installPluginFromGitSpec", () => {
     });
   });
 
+  it("reruns a warned git preflight on acknowledgement and keeps a new block terminal", async () => {
+    runCommandWithTimeoutMock
+      .mockResolvedValueOnce({ code: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ code: 0, stdout: "abc123\n", stderr: "" });
+    const warning = {
+      reason: "manual git review required",
+      findings: [
+        {
+          ruleId: "git-review",
+          severity: "warn" as const,
+          message: "Review the cloned repository.",
+        },
+      ],
+    };
+    preflightPluginGitInstallPolicyMock.mockResolvedValueOnce({ warning });
+
+    const first = await installPluginFromGitSpec({
+      spec: "git:github.com/acme/demo",
+      expectedPluginId: "demo",
+    });
+
+    expect(first).toMatchObject({
+      ok: false,
+      installPolicyWarning: warning,
+    });
+    expect(runCommandWithTimeoutMock).toHaveBeenCalledTimes(2);
+    expect(installPluginFromInstalledPackageDirMock).not.toHaveBeenCalled();
+
+    runCommandWithTimeoutMock.mockReset();
+    runCommandWithTimeoutMock
+      .mockResolvedValueOnce({ code: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ code: 0, stdout: "abc123\n", stderr: "" });
+    preflightPluginGitInstallPolicyMock.mockImplementationOnce(
+      async (params: { acknowledgeInstallPolicyWarning?: boolean }) => {
+        expect(params.acknowledgeInstallPolicyWarning).toBe(true);
+        return {
+          blocked: {
+            reason: "git source became blocked on re-evaluation",
+            code: "security_scan_blocked",
+          },
+        };
+      },
+    );
+
+    const second = await installPluginFromGitSpec({
+      spec: "git:github.com/acme/demo",
+      expectedPluginId: "demo",
+      acknowledgeInstallPolicyWarning: true,
+    });
+
+    expect(second).toMatchObject({
+      ok: false,
+      error: "git source became blocked on re-evaluation",
+    });
+    expect(preflightPluginGitInstallPolicyMock).toHaveBeenCalledTimes(2);
+    expect(installPluginFromInstalledPackageDirMock).not.toHaveBeenCalled();
+  });
+
   it("emits git audit errors when install policy preflight fails", async () => {
     runCommandWithTimeoutMock
       .mockResolvedValueOnce({ code: 0, stdout: "", stderr: "" })

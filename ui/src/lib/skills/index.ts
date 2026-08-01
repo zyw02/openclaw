@@ -1,7 +1,8 @@
-import {
-  ClawHubTrustErrorCodes,
-  readClawHubTrustErrorDetails,
-} from "../../../../packages/gateway-protocol/src/clawhub-trust-error-details.js";
+import { ClawHubTrustErrorCodes } from "../../../../packages/gateway-protocol/src/clawhub-trust-error-details.js";
+import type {
+  SkillsInstallParams,
+  SkillsUpdateParams,
+} from "../../../../packages/gateway-protocol/src/schema/agents-models-skills.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import type {
   AgentsListResult,
@@ -10,112 +11,28 @@ import type {
   SkillStatusReport,
 } from "../../api/types.ts";
 import {
-  type ClawHubInstallMessage,
+  formatClawHubAcknowledgementMessage,
+  formatClawHubInstallMessage,
   readInstallPolicyWarningText,
+  readClawHubTrustDetailsFromError,
   type SkillMessage,
 } from "./messages.ts";
-
-export type ClawHubSearchResult = {
-  score: number;
-  slug: string;
-  displayName: string;
-  summary?: string;
-  icon?: string | null;
-  version?: string;
-  updatedAt?: number;
-};
-
-export type ClawHubSkillDetail = {
-  skill: {
-    slug: string;
-    displayName: string;
-    summary?: string;
-    icon?: string | null;
-    tags?: Record<string, string>;
-    channel?: string | null;
-    isOfficial?: boolean | null;
-    createdAt: number;
-    updatedAt: number;
-  } | null;
-  latestVersion?: {
-    version: string;
-    createdAt: number;
-    changelog?: string;
-  } | null;
-  metadata?: {
-    os?: string[] | null;
-    systems?: string[] | null;
-  } | null;
-  owner?: {
-    handle?: string | null;
-    displayName?: string | null;
-    image?: string | null;
-    official?: boolean | null;
-    channel?: string | null;
-    isOfficial?: boolean | null;
-  } | null;
-};
-
-export type ClawHubSkillSecurityVerdict = {
-  registry: string;
-  ok: boolean;
-  decision: string;
-  reasons: string[];
-  requestedSlug: string;
-  requestedVersion: string;
-  slug?: string | null;
-  version?: string | null;
-  displayName?: string | null;
-  publisherHandle?: string | null;
-  publisherDisplayName?: string | null;
-  createdAt?: number | null;
-  checkedAt?: number | null;
-  skillUrl?: string | null;
-  securityAuditUrl?: string | null;
-  securityStatus?: string | null;
-  securityPassed?: boolean | null;
-  error?: {
-    code?: string;
-    message?: string;
-  };
-};
-
-type SkillsState = {
-  client: GatewayBrowserClient | null;
-  connected: boolean;
-  skillsAgentId: string | null;
-  skillsAgentRevision: number;
-  skillsLoading: boolean;
-  skillsReport: SkillStatusReport | null;
-  skillsError: string | null;
-  skillOperation: SkillOperation;
-  skillEdits: Record<string, string>;
-  skillMessages: SkillMessageMap;
-  clawhubSearchQuery: string;
-  clawhubSearchResults: ClawHubSearchResult[] | null;
-  clawhubSearchLoading: boolean;
-  clawhubSearchError: string | null;
-  clawhubDetail: ClawHubSkillDetail | null;
-  clawhubDetailSlug: string | null;
-  clawhubDetailLoading: boolean;
-  clawhubDetailError: string | null;
-  clawhubInstallMessage: ClawHubInstallMessage | null;
-  clawhubVerdicts: Record<string, ClawHubSkillSecurityVerdict>;
-  clawhubVerdictsLoading: boolean;
-  clawhubVerdictsError: string | null;
-  skillCardContents: Record<string, string>;
-  skillCardContentKeys: Record<string, string>;
-  skillCardLoadingKey: string | null;
-  skillCardErrors: Record<string, string>;
-};
-
-export type SkillOperation =
-  | { kind: "refresh" }
-  | { kind: "skill"; skillKey: string }
-  | { kind: "clawhub"; slug: string }
-  | null;
-
-type ActiveSkillOperation = Exclude<SkillOperation, null>;
+import type {
+  ActiveSkillOperation,
+  ClawHubSearchResult,
+  ClawHubSkillDetail,
+  ClawHubSkillSecurityVerdict,
+  SkillOperation,
+  SkillsState,
+} from "./types.ts";
+export type { ClawHubInstallMessage } from "./messages.ts";
+export type {
+  ClawHubSearchResult,
+  ClawHubSkillDetail,
+  ClawHubSkillSecurityVerdict,
+  SkillMessageMap,
+  SkillOperation,
+} from "./types.ts";
 
 function ownsSkillOperation(
   state: SkillsState,
@@ -133,8 +50,6 @@ function releaseSkillOperation(state: SkillsState, operation: ActiveSkillOperati
   }
 }
 
-export type SkillMessageMap = Record<string, SkillMessage>;
-
 function setSkillMessage(state: SkillsState, key: string, message: SkillMessage) {
   if (!key.trim()) {
     return;
@@ -143,23 +58,6 @@ function setSkillMessage(state: SkillsState, key: string, message: SkillMessage)
 }
 
 const getErrorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
-
-function getClawHubTrustDetailsFromError(err: unknown) {
-  if (!err || typeof err !== "object" || !("details" in err)) {
-    return undefined;
-  }
-  return readClawHubTrustErrorDetails((err as { details?: unknown }).details);
-}
-
-const formatClawHubInstallMessage = (message: string, warning?: string): string =>
-  warning ? `${message}\n\n${warning}` : message;
-
-function formatClawHubAcknowledgementMessage(warning?: string): string {
-  return formatClawHubInstallMessage(
-    "Review the ClawHub warning before installing this skill.",
-    warning,
-  );
-}
 
 export function clawhubVerdictKey(target: {
   registry: string;
@@ -555,7 +453,10 @@ async function runSkillMutation(
 
 export async function updateSkillEnabled(state: SkillsState, skillKey: string, enabled: boolean) {
   await runSkillMutation(state, skillKey, async (client) => {
-    await client.request("skills.update", { skillKey, enabled });
+    await client.request("skills.update", {
+      skillKey,
+      enabled,
+    } satisfies SkillsUpdateParams);
     return {
       kind: "success",
       message: enabled ? "Skill enabled" : "Skill disabled",
@@ -566,7 +467,10 @@ export async function updateSkillEnabled(state: SkillsState, skillKey: string, e
 export async function saveSkillApiKey(state: SkillsState, skillKey: string) {
   await runSkillMutation(state, skillKey, async (client) => {
     const editValue = state.skillEdits[skillKey] ?? "";
-    await client.request("skills.update", { skillKey, apiKey: editValue });
+    await client.request("skills.update", {
+      skillKey,
+      apiKey: editValue,
+    } satisfies SkillsUpdateParams);
     return {
       kind: "success",
       message: `API key saved — stored in openclaw.json (skills.entries.${skillKey})`,
@@ -591,7 +495,7 @@ export async function installSkill(
         dangerouslyForceUnsafeInstall,
         ...(acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
         timeoutMs: 120000,
-      });
+      } satisfies Extract<SkillsInstallParams, { installId: string }>);
       return {
         kind: "success",
         message: result?.message ?? "Installed",
@@ -685,7 +589,7 @@ export async function installFromClawHub(
       ...(version ? { version } : {}),
       ...(acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
       ...(acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
-    });
+    } satisfies Extract<SkillsInstallParams, { source: "clawhub" }>);
     if (!ownsSkillOperation(state, client, operation)) {
       return;
     }
@@ -708,7 +612,7 @@ export async function installFromClawHub(
       ownsSkillOperation(state, client, operation) &&
       isSkillsAgentScopeCurrent(state, agentScope)
     ) {
-      const trustDetails = getClawHubTrustDetailsFromError(err);
+      const trustDetails = readClawHubTrustDetailsFromError(err);
       const installPolicyWarningText = readInstallPolicyWarningText(err);
       if (installPolicyWarningText) {
         state.clawhubInstallMessage = {
@@ -723,18 +627,19 @@ export async function installFromClawHub(
       }
       const needsAcknowledgement =
         trustDetails?.clawhubTrustCode === ClawHubTrustErrorCodes.RISK_ACKNOWLEDGEMENT_REQUIRED;
-      state.clawhubInstallMessage = {
-        kind: "error",
-        text: needsAcknowledgement
-          ? formatClawHubAcknowledgementMessage(trustDetails?.warning)
-          : formatClawHubInstallMessage(getErrorMessage(err), trustDetails?.warning),
-        ...(needsAcknowledgement ? { acknowledgeSlug: slug } : {}),
-        ...(needsAcknowledgement && trustDetails?.version
-          ? { acknowledgeVersion: trustDetails.version }
-          : {}),
-        ...(needsAcknowledgement ? { acknowledgeLabel: "Acknowledge risk and install" } : {}),
-        ...(needsAcknowledgement ? { acknowledgeClawHubRisk: true } : {}),
-      };
+      state.clawhubInstallMessage = needsAcknowledgement
+        ? {
+            kind: "error",
+            text: formatClawHubAcknowledgementMessage(trustDetails?.warning),
+            acknowledgeSlug: slug,
+            ...(trustDetails?.version ? { acknowledgeVersion: trustDetails.version } : {}),
+            acknowledgeLabel: "Acknowledge risk and install",
+            acknowledgeClawHubRisk: true,
+          }
+        : {
+            kind: "error",
+            text: formatClawHubInstallMessage(getErrorMessage(err), trustDetails?.warning),
+          };
     }
   } finally {
     if (

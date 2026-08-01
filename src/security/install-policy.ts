@@ -2,6 +2,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
+import type { InstallPolicyWarningFinding } from "../../packages/gateway-protocol/src/install-policy-warning-details.js";
 import type { OpenClawConfig, SecurityConfig } from "../config/types.openclaw.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { runCommandWithTimeout } from "../process/exec.js";
@@ -68,14 +69,7 @@ export type InstallPolicySource = {
   network: boolean;
 };
 
-export type InstallPolicyFinding = {
-  ruleId: string;
-  severity: "info" | "warn" | "critical";
-  message: string;
-  file?: string;
-  line?: number;
-  evidence?: string;
-};
+export type InstallPolicyFinding = InstallPolicyWarningFinding;
 
 type InstallPolicyRequest = {
   targetType: InstallPolicyTarget;

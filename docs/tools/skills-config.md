@@ -199,7 +199,7 @@ A warning stops that install request until the user confirms it. Interactive
 CLI commands prompt; Gateway clients receive structured warning details and
 retry the same request with `acknowledgeInstallPolicyWarning: true`.
 Noninteractive CLI commands use
-`--acknowledge-install-policy-warning`. OpenClaw reruns the policy on the
+`--dangerously-force-unsafe-install`. OpenClaw reruns the policy on the
 acknowledged request, so an updated `block` decision still cannot be
 overridden. The acknowledgement applies only to warnings returned during
 that install or update request. It is request-scoped, not stored or bound to a

@@ -1,6 +1,10 @@
+import { formatInstallPolicyWarningDetails } from "../../../packages/gateway-protocol/src/install-policy-warning-details.js";
 import { stripAnsi } from "../../../packages/terminal-core/src/ansi.js";
+import { sanitizeTerminalText } from "../../../packages/terminal-core/src/safe-text.js";
+import { formatCliCommand } from "../../cli/command-format.js";
 import { resolvePluginInstallSourcePlan } from "../../cli/plugin-install-plan.js";
 import { createPluginInstallLogger } from "../../cli/plugins-command-helpers.js";
+import { quoteCliArg } from "../../cli/quote-cli-arg.js";
 import { CLAWHUB_INSTALL_ERROR_CODE } from "../../plugins/clawhub.js";
 import type { ConfigSnapshotForInstallPersist } from "../../plugins/install-persistence.js";
 import {
@@ -8,6 +12,7 @@ import {
   NON_CLAWHUB_INSTALL_FORCE_FLAG,
   type NonClawHubInstallSourceClass,
 } from "../../plugins/install-provenance.js";
+import { PLUGIN_INSTALL_ERROR_CODE } from "../../plugins/install-types.js";
 import { installManagedPluginSource } from "../../plugins/management-service.js";
 
 function resolveNonClawHubChatInstallAcknowledgement(params: {
@@ -64,6 +69,31 @@ export async function installPluginFromPluginsCommand(params: {
       : logger,
   });
   if (!result.ok) {
+    if (
+      result.code === PLUGIN_INSTALL_ERROR_CODE.INSTALL_POLICY_ACKNOWLEDGEMENT_REQUIRED &&
+      result.installPolicyWarning
+    ) {
+      const command = formatCliCommand(
+        [
+          "openclaw",
+          "plugins",
+          "install",
+          params.raw,
+          ...(params.force ? ["--force"] : []),
+          "--dangerously-force-unsafe-install",
+        ]
+          .map(quoteCliArg)
+          .join(" "),
+      );
+      return {
+        ok: false,
+        error: [
+          formatInstallPolicyWarningDetails(result.installPolicyWarning, sanitizeTerminalText),
+          "The /plugins chat command cannot acknowledge operator install policy warnings.",
+          `After reviewing the findings, run ${command} from a trusted shell to continue.`,
+        ].join("\n"),
+      };
+    }
     const warning = "warning" in result ? result.warning : warnings.join("\n");
     const warningPrefix = warning ? `${warning} ` : "";
     if (

@@ -338,12 +338,13 @@ describe("installClawPackages", () => {
     expect(installPlugin).toHaveBeenCalledWith(
       expect.objectContaining({
         raw: "clawhub:@owner/audit@2.0.1",
-        opts: {
+        opts: expect.objectContaining({
           acknowledgeClawHubRisk: true,
           expectedIntegrity:
             "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
           expectedPluginId: "audit",
-        },
+          onInstallPolicyWarning: expect.any(Function),
+        }),
         invalidateRuntimeCache: false,
         clawManaged: true,
       }),
@@ -358,6 +359,95 @@ describe("installClawPackages", () => {
         relationship: "referenced",
         origin: "claw-introduced",
         independentOwner: false,
+      }),
+    );
+  });
+
+  it("returns a trusted-shell recovery hint when policy acknowledgement is declined", async () => {
+    const pending = {
+      kind: "plugin",
+      ref: "@owner/audit",
+      status: "pending",
+      integrity,
+    } as PersistedClawPackageRef;
+    const onInstallPolicyWarning = vi.fn().mockResolvedValue(false);
+    const installPlugin = vi.fn(
+      async ({
+        opts,
+      }: {
+        opts: {
+          onInstallPolicyWarning?: (warning: { reason: string }) => boolean | Promise<boolean>;
+        };
+      }) => {
+        await opts.onInstallPolicyWarning?.({ reason: "Manual review required." });
+        throw new Error("Manual review required.");
+      },
+    );
+
+    await expect(
+      installClawPackages(plan([pluginPackage]), {
+        deps: {
+          installPlugin,
+          probePlugin,
+          preflightPlugin: vi.fn().mockResolvedValue({ ok: true, action: "install" }),
+          persistPackageRef: vi.fn().mockReturnValue(pending),
+          completePackageRef,
+          acquirePackageLease,
+        },
+        onInstallPolicyWarning,
+      }),
+    ).rejects.toMatchObject({
+      code: "package_install_failed",
+      message: expect.stringContaining(
+        "rerun the command with --dangerously-force-unsafe-install from a trusted shell",
+      ),
+    });
+    expect(onInstallPolicyWarning).toHaveBeenCalledWith({
+      reason: "Manual review required.",
+    });
+  });
+
+  it("passes explicit policy acknowledgement to skill installs", async () => {
+    const skillIntegrity = `sha256-${Buffer.from("a".repeat(64), "hex").toString("base64")}`;
+    const installSkill = vi.fn().mockResolvedValue({
+      ok: true,
+      slug: "triage",
+      version: "1.2.3",
+      targetDir: "/tmp/incident-2/skills/triage",
+    });
+
+    await installClawPackages(
+      plan([
+        {
+          kind: "skill",
+          source: "clawhub",
+          ref: "@owner/triage",
+          version: "1.2.3",
+          integrity: skillIntegrity,
+        },
+      ]),
+      {
+        acknowledgeInstallPolicyWarning: true,
+        deps: {
+          installSkill,
+          preflightSkill: vi
+            .fn()
+            .mockResolvedValue({ ok: true, action: "install", integrity: skillIntegrity }),
+          persistPackageRef: vi.fn().mockReturnValue({
+            kind: "skill",
+            ref: "@owner/triage",
+            status: "pending",
+            integrity: skillIntegrity,
+          }),
+          completePackageRef,
+          acquirePackageLease,
+        },
+      },
+    );
+
+    expect(installSkill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        acknowledgeInstallPolicyWarning: true,
       }),
     );
   });

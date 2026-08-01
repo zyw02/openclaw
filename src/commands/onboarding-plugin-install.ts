@@ -52,10 +52,11 @@ import type { PluginPackageInstall } from "../plugins/manifest.js";
 import { clearPluginMetadataLifecycleCaches } from "../plugins/plugin-metadata-lifecycle.js";
 import { invalidatePluginRuntimeDiscoveryAfterConfigMutation } from "../plugins/registry-refresh.js";
 import type { RuntimeEnv } from "../runtime.js";
-import { withTimeout } from "../utils/with-timeout.js";
 import { VERSION } from "../version.js";
 import { t } from "../wizard/i18n/index.js";
+import { confirmWizardInstallPolicyWarning } from "../wizard/install-policy-warning.js";
 import type { WizardPrompter } from "../wizard/prompts.js";
+import { runWithPausableInstallWatchdog } from "./onboarding-install-watchdog.js";
 
 type InstallChoice = "clawhub" | "npm" | "local" | "skip";
 type InstallPluginFromClawHubResult = Awaited<
@@ -819,10 +820,15 @@ async function runOnboardingPluginInstallWithProgress(params: {
   entry: OnboardingPluginInstallEntry;
   prompter: WizardPrompter;
   runtime: RuntimeEnv;
-  install: (logger: {
-    info: (message: string) => void;
-    warn: (message: string) => void;
-  }) => Promise<InstallPluginResult>;
+  install: (
+    logger: {
+      info: (message: string) => void;
+      warn: (message: string) => void;
+    },
+    onInstallPolicyWarning: NonNullable<
+      Parameters<typeof installPluginFromNpmSpec>[0]["onInstallPolicyWarning"]
+    >,
+  ) => Promise<InstallPluginResult>;
   rethrowUnexpectedErrors?: boolean;
 }): Promise<
   | { status: "timed_out" }
@@ -844,14 +850,28 @@ async function runOnboardingPluginInstallWithProgress(params: {
   };
 
   try {
-    const result = await withTimeout(
-      params.install({
-        info: updateProgress,
-        warn: (message) => {
-          updateProgress(message);
-          logInstallWarningWithSpacing(params.runtime, message);
-        },
-      }),
+    const result = await runWithPausableInstallWatchdog(
+      (withHumanPrompt) =>
+        params.install(
+          {
+            info: updateProgress,
+            warn: (message) => {
+              updateProgress(message);
+              logInstallWarningWithSpacing(params.runtime, message);
+            },
+          },
+          async (warning) => {
+            animated.stop();
+            progress.stop("Review install policy warning");
+            return await withHumanPrompt(
+              async () =>
+                await confirmWizardInstallPolicyWarning({
+                  prompter: params.prompter,
+                  warning,
+                }),
+            );
+          },
+        ),
       ONBOARDING_PLUGIN_INSTALL_WATCHDOG_TIMEOUT_MS,
     );
     animated.stop();
@@ -897,7 +917,7 @@ async function installPluginFromNpmSpecWithProgress(params: {
 > {
   return await runOnboardingPluginInstallWithProgress({
     ...params,
-    install: (logger) =>
+    install: (logger, onInstallPolicyWarning) =>
       installPluginFromNpmSpec({
         spec: params.npmSpec,
         mode: "update",
@@ -911,6 +931,7 @@ async function installPluginFromNpmSpecWithProgress(params: {
           : {}),
         extensionsDir: resolveDefaultPluginExtensionsDir(),
         logger,
+        onInstallPolicyWarning,
       }),
   });
 }
@@ -930,7 +951,7 @@ async function installPluginFromNpmPackArchiveWithProgress(params: {
 > {
   return await runOnboardingPluginInstallWithProgress({
     ...params,
-    install: (logger) =>
+    install: (logger, onInstallPolicyWarning) =>
       installPluginFromNpmPackArchive({
         archivePath: params.archivePath,
         timeoutMs: ONBOARDING_PLUGIN_INSTALL_TIMEOUT_MS,
@@ -939,6 +960,7 @@ async function installPluginFromNpmPackArchiveWithProgress(params: {
         expectedIntegrity: params.entry.install.expectedIntegrity,
         extensionsDir: resolveDefaultPluginExtensionsDir(),
         logger,
+        onInstallPolicyWarning,
       }),
     // Archive overrides retain their existing unexpected-error contract.
     rethrowUnexpectedErrors: true,
@@ -1091,47 +1113,61 @@ async function installPluginFromClawHubSpecWithProgress(params: {
 
   try {
     const { installPluginFromClawHub } = await import("../plugins/clawhub.js");
-    const result = await withTimeout(
-      installPluginFromClawHub({
-        spec: params.clawhubSpec,
-        timeoutMs: ONBOARDING_PLUGIN_INSTALL_TIMEOUT_MS,
-        config: params.cfg,
-        extensionsDir: resolveDefaultPluginExtensionsDir(),
-        expectedPluginId: params.entry.pluginId,
-        mode: "install",
-        logger: {
-          info: updateProgress,
-          warn: (message) => {
-            updateProgress(message);
-            if (isReviewRequiredClawHubTrustWarning(message)) {
-              return;
-            }
-            if (isClawHubTrustWarning(message)) {
-              renderTrustWarning(message);
-              return;
-            }
-            logInstallWarningWithSpacing(params.runtime, message);
+    const result = await runWithPausableInstallWatchdog(
+      (withHumanPrompt) =>
+        installPluginFromClawHub({
+          spec: params.clawhubSpec,
+          timeoutMs: ONBOARDING_PLUGIN_INSTALL_TIMEOUT_MS,
+          config: params.cfg,
+          extensionsDir: resolveDefaultPluginExtensionsDir(),
+          expectedPluginId: params.entry.pluginId,
+          mode: "install",
+          logger: {
+            info: updateProgress,
+            warn: (message) => {
+              updateProgress(message);
+              if (isReviewRequiredClawHubTrustWarning(message)) {
+                return;
+              }
+              if (isClawHubTrustWarning(message)) {
+                renderTrustWarning(message);
+                return;
+              }
+              logInstallWarningWithSpacing(params.runtime, message);
+            },
           },
-        },
-        onClawHubRisk: async (request) => {
-          animated.stop();
-          progress.stop("Review ClawHub warning");
-          renderTrustWarning(request.warning);
-          const packageName = sanitizeTerminalText(request.packageName);
-          const releaseLabel = `${packageName}@${sanitizeTerminalText(request.version)}`;
-          if (request.acknowledgementKind === "type-package") {
-            const answer = await params.prompter.text({
-              message: `To install anyway, type the package name for "${releaseLabel}"`,
-              placeholder: packageName,
+          onClawHubRisk: async (request) => {
+            animated.stop();
+            progress.stop("Review ClawHub warning");
+            renderTrustWarning(request.warning);
+            return await withHumanPrompt(async () => {
+              const packageName = sanitizeTerminalText(request.packageName);
+              const releaseLabel = `${packageName}@${sanitizeTerminalText(request.version)}`;
+              if (request.acknowledgementKind === "type-package") {
+                const answer = await params.prompter.text({
+                  message: `To install anyway, type the package name for "${releaseLabel}"`,
+                  placeholder: packageName,
+                });
+                return answer.trim() === packageName;
+              }
+              return await params.prompter.confirm({
+                message: `Install ClawHub package "${releaseLabel}" after reviewing the warning above?`,
+                initialValue: false,
+              });
             });
-            return answer.trim() === packageName;
-          }
-          return await params.prompter.confirm({
-            message: `Install ClawHub package "${releaseLabel}" after reviewing the warning above?`,
-            initialValue: false,
-          });
-        },
-      }),
+          },
+          onInstallPolicyWarning: async (warning) => {
+            animated.stop();
+            progress.stop("Review install policy warning");
+            return await withHumanPrompt(
+              async () =>
+                await confirmWizardInstallPolicyWarning({
+                  prompter: params.prompter,
+                  warning,
+                }),
+            );
+          },
+        }),
       ONBOARDING_PLUGIN_INSTALL_WATCHDOG_TIMEOUT_MS,
     );
     animated.stop();

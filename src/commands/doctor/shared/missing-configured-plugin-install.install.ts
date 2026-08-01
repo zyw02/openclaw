@@ -22,6 +22,7 @@ import {
   resolveDefaultPluginNpmDir,
   resolvePluginInstallDir,
 } from "../../../plugins/install-paths.js";
+import type { InstallPolicyWarning } from "../../../plugins/install-security-scan.js";
 import { installPluginFromNpmSpec } from "../../../plugins/install.js";
 import {
   buildNpmResolutionInstallFields,
@@ -124,6 +125,8 @@ export async function installCandidate(params: {
   repairReason?: InstallCandidateRepairReason;
   acknowledgeClawHubRisk?: boolean;
   onClawHubRisk?: (request: ClawHubRiskAcknowledgementRequest) => boolean | Promise<boolean>;
+  acknowledgeInstallPolicyWarning?: boolean;
+  onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
 }): Promise<{
   records: Record<string, PluginInstallRecord>;
   changes: string[];
@@ -203,6 +206,10 @@ export async function installCandidate(params: {
       },
       ...(params.acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
       ...(params.onClawHubRisk ? { onClawHubRisk: params.onClawHubRisk } : {}),
+      ...(params.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
+      ...(params.onInstallPolicyWarning
+        ? { onInstallPolicyWarning: params.onInstallPolicyWarning }
+        : {}),
     });
     if (clawhubResult.ok) {
       const pluginId = clawhubResult.pluginId;
@@ -274,6 +281,10 @@ export async function installCandidate(params: {
     ...(candidate.trustedSourceLinkedOfficialInstall
       ? { trustedSourceLinkedOfficialInstall: true }
       : {}),
+    ...(params.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
+    ...(params.onInstallPolicyWarning
+      ? { onInstallPolicyWarning: params.onInstallPolicyWarning }
+      : {}),
     mode: npmInstallMode,
   });
   if (!result.ok && npmInstallMode === "install" && isPluginAlreadyExistsError(result.error)) {
@@ -286,6 +297,10 @@ export async function installCandidate(params: {
       expectedIntegrity: candidate.expectedIntegrity,
       ...(candidate.trustedSourceLinkedOfficialInstall
         ? { trustedSourceLinkedOfficialInstall: true }
+        : {}),
+      ...(params.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
+      ...(params.onInstallPolicyWarning
+        ? { onInstallPolicyWarning: params.onInstallPolicyWarning }
         : {}),
       mode: "update",
     });

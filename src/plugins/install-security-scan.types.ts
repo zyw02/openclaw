@@ -1,11 +1,8 @@
 // Defines plugin install security scan result types.
+import type { InstallPolicyWarningDetails } from "../../packages/gateway-protocol/src/install-policy-warning-details.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import type { InstallPolicyFinding } from "../security/install-policy.js";
 
-export type InstallPolicyWarning = {
-  reason: string;
-  findings?: InstallPolicyFinding[];
-};
+export type InstallPolicyWarning = InstallPolicyWarningDetails["installPolicyWarning"];
 
 /** Result returned by plugin/skill install security policy checks. */
 export type InstallSecurityScanResult =

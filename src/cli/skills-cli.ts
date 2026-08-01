@@ -626,8 +626,8 @@ export function registerSkillsCli(program: Command) {
       false,
     )
     .option(
-      "--acknowledge-install-policy-warning",
-      "Acknowledge operator install policy warnings without prompting",
+      "--dangerously-force-unsafe-install",
+      "Acknowledge operator install policy warnings; never overrides blocks",
       false,
     )
     .option("--global", "Install into the shared managed skills directory", false)
@@ -646,7 +646,7 @@ export function registerSkillsCli(program: Command) {
           forceInstall?: boolean;
           acknowledgeClawhubRisk?: boolean;
           acknowledgeClawHubRisk?: boolean;
-          acknowledgeInstallPolicyWarning?: boolean;
+          dangerouslyForceUnsafeInstall?: boolean;
           global?: boolean;
           agent?: string;
           as?: string;
@@ -679,7 +679,7 @@ export function registerSkillsCli(program: Command) {
                 warn: (message) => defaultRuntime.log(formatSkillWarning(message)),
               },
               ...resolveInstallPolicyAcknowledgementCliOptions({
-                acknowledgeInstallPolicyWarning: opts.acknowledgeInstallPolicyWarning,
+                dangerouslyForceUnsafeInstall: opts.dangerouslyForceUnsafeInstall,
                 action: "install",
               }),
             });
@@ -716,7 +716,7 @@ export function registerSkillsCli(program: Command) {
               "installing",
             ),
             ...resolveInstallPolicyAcknowledgementCliOptions({
-              acknowledgeInstallPolicyWarning: opts.acknowledgeInstallPolicyWarning,
+              dangerouslyForceUnsafeInstall: opts.dangerouslyForceUnsafeInstall,
               action: "install",
             }),
             logger: {
@@ -755,8 +755,8 @@ export function registerSkillsCli(program: Command) {
       false,
     )
     .option(
-      "--acknowledge-install-policy-warning",
-      "Acknowledge operator install policy warnings without prompting",
+      "--dangerously-force-unsafe-install",
+      "Acknowledge operator install policy warnings; never overrides blocks",
       false,
     )
     .option("--global", "Update skills in the shared managed skills directory", false)
@@ -769,7 +769,7 @@ export function registerSkillsCli(program: Command) {
           forceInstall?: boolean;
           acknowledgeClawhubRisk?: boolean;
           acknowledgeClawHubRisk?: boolean;
-          acknowledgeInstallPolicyWarning?: boolean;
+          dangerouslyForceUnsafeInstall?: boolean;
           global?: boolean;
           agent?: string;
         },
@@ -804,7 +804,7 @@ export function registerSkillsCli(program: Command) {
               "updating",
             ),
             ...resolveInstallPolicyAcknowledgementCliOptions({
-              acknowledgeInstallPolicyWarning: opts.acknowledgeInstallPolicyWarning,
+              dangerouslyForceUnsafeInstall: opts.dangerouslyForceUnsafeInstall,
               action: "update",
             }),
             logger: {

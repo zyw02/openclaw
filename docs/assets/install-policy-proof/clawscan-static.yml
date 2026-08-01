@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/openclaw/clawscan/main/schemas/clawscan.schema.json
+version: 1
+
+profiles:
+  install-policy-proof:
+    scanners:
+      - id: clawscan-static
+        gate:
+          rules:
+            - id: destructive-shell-block
+              path: findings[].id
+              equals: static.destructive_shell
+              action: block
+            - id: prompt-injection-warning
+              path: findings[].id
+              equals: static.prompt_injection
+              action: warn

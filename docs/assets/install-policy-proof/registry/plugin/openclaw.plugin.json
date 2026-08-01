@@ -1,0 +1,8 @@
+{
+  "id": "policy-proof-plugin",
+  "name": "Policy Proof Plugin",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false
+  }
+}

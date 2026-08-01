@@ -1,0 +1,38 @@
+{
+  "agents": {
+    "defaults": {
+      "workspace": "__PROOF_ROOT__/workspace"
+    }
+  },
+  "security": {
+    "installPolicy": {
+      "enabled": true,
+      "targets": [
+        "skill",
+        "plugin"
+      ],
+      "exec": {
+        "source": "exec",
+        "command": "__PROOF_ROOT__/bin/clawscan",
+        "args": [
+          "openclaw-install-policy",
+          "--config",
+          "__PROOF_ROOT__/clawscan-static.yml",
+          "--profile",
+          "install-policy-proof"
+        ],
+        "trustedDirs": [
+          "__PROOF_ROOT__/bin",
+          "__PROOF_ROOT__"
+        ],
+        "passEnv": [
+          "PATH",
+          "TMPDIR"
+        ],
+        "timeoutMs": 1200000,
+        "noOutputTimeoutMs": 1200000,
+        "maxOutputBytes": 1048576
+      }
+    }
+  }
+}

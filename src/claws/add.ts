@@ -9,6 +9,7 @@ import type { AgentConfig } from "../config/types.agents.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { resolvePathViaExistingAncestorSync } from "../infra/boundary-path.js";
 import { normalizeWindowsPathForComparison } from "../infra/path-guards.js";
+import type { InstallPolicyWarning } from "../plugins/install-security-scan.js";
 import { DEFAULT_AGENT_ID, normalizeAgentId } from "../routing/session-key.js";
 import type { RuntimeEnv } from "../runtime.js";
 import type { OpenClawStateDatabaseOptions } from "../state/openclaw-state-db.js";
@@ -56,6 +57,8 @@ type ClawAddApplyOptions = OpenClawStateDatabaseOptions & {
   installCronJobs?: typeof installClawCronJobs;
   cronGateway?: Pick<ClawCronGateway, "add" | "list" | "waitUntilAgentAvailable">;
   nowMs?: number;
+  acknowledgeInstallPolicyWarning?: boolean;
+  onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
 };
 export class ClawAddMutationError extends Error {
   constructor(

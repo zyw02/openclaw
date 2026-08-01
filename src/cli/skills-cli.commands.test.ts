@@ -623,6 +623,29 @@ describe("skills cli commands", () => {
     expect(installSkillFromClawHubMock).not.toHaveBeenCalled();
   });
 
+  it("passes install-policy acknowledgement through for git and local source installs", async () => {
+    installSkillFromSourceMock.mockResolvedValue({
+      ok: true,
+      slug: "tools",
+      targetDir: "/tmp/workspace/skills/tools",
+      source: "git",
+    });
+
+    await runCommand([
+      "skills",
+      "install",
+      "git:owner/tools",
+      "--dangerously-force-unsafe-install",
+    ]);
+
+    expect(installSkillFromSourceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spec: "git:owner/tools",
+        acknowledgeInstallPolicyWarning: true,
+      }),
+    );
+  });
+
   it("installs a skill from a local directory", async () => {
     installSkillFromSourceMock.mockResolvedValue({
       ok: true,
@@ -740,7 +763,7 @@ describe("skills cli commands", () => {
     { flag: "--force-install", option: "forceInstall" },
     { flag: "--acknowledge-clawhub-risk", option: "acknowledgeClawHubRisk" },
     {
-      flag: "--acknowledge-install-policy-warning",
+      flag: "--dangerously-force-unsafe-install",
       option: "acknowledgeInstallPolicyWarning",
     },
   ])("passes $flag through for ClawHub skill installs", async ({ flag, option }) => {
@@ -845,7 +868,7 @@ describe("skills cli commands", () => {
     { flag: "--force-install", option: "forceInstall" },
     { flag: "--acknowledge-clawhub-risk", option: "acknowledgeClawHubRisk" },
     {
-      flag: "--acknowledge-install-policy-warning",
+      flag: "--dangerously-force-unsafe-install",
       option: "acknowledgeInstallPolicyWarning",
     },
   ])("passes $flag through for ClawHub skill updates", async ({ flag, option }) => {

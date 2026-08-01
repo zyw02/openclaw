@@ -24,6 +24,7 @@ import {
   type PluginUpdateOutcome,
 } from "../../plugins/update.js";
 import { defaultRuntime } from "../../runtime.js";
+import { resolveInstallPolicyAcknowledgementCliOptions } from "../install-policy-acknowledgement.js";
 import { listPersistedBundledPluginLocationBridges } from "../plugins-location-bridges.js";
 import {
   convergenceWarningsToOutcomes,
@@ -266,6 +267,11 @@ export async function updatePluginsAfterCoreUpdate(params: {
       },
     },
   );
+  const installPolicyAcknowledgementOptions = resolveInstallPolicyAcknowledgementCliOptions({
+    action: "update",
+    dangerouslyForceUnsafeInstall: params.opts.dangerouslyForceUnsafeInstall,
+    allowPrompt: !params.opts.dryRun && !params.opts.yes && !params.opts.json,
+  });
   const pluginInstallRecords =
     params.pluginInstallRecords ?? (await loadInstalledPluginIndexInstallRecords());
   const pluginUpdateChannel = params.channel;
@@ -283,6 +289,7 @@ export async function updatePluginsAfterCoreUpdate(params: {
       workspaceDir: params.root,
     }),
     ...clawHubRiskAcknowledgementOptions,
+    ...installPolicyAcknowledgementOptions,
     logger: pluginLogger,
   });
   for (const error of syncResult.summary.errors) {
@@ -358,6 +365,7 @@ export async function updatePluginsAfterCoreUpdate(params: {
       logger: pluginLogger,
       onIntegrityDrift: onPluginIntegrityDrift,
       ...clawHubRiskAcknowledgementOptions,
+      ...installPolicyAcknowledgementOptions,
     });
     pluginConfig = repairResult.config;
     pluginsChanged ||= repairResult.changed;
@@ -384,6 +392,7 @@ export async function updatePluginsAfterCoreUpdate(params: {
     logger: pluginLogger,
     onIntegrityDrift: onPluginIntegrityDrift,
     ...clawHubRiskAcknowledgementOptions,
+    ...installPolicyAcknowledgementOptions,
   });
   pluginConfig = npmResult.config;
   pluginsChanged ||= npmResult.changed;
@@ -438,6 +447,7 @@ export async function updatePluginsAfterCoreUpdate(params: {
     env: process.env,
     baselineInstallRecords: convergenceBaselineRecords,
     ...clawHubRiskAcknowledgementOptions,
+    ...installPolicyAcknowledgementOptions,
   });
   for (const change of convergence.changes) {
     if (!params.opts.json) {

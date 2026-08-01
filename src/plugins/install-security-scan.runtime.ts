@@ -873,25 +873,27 @@ async function runOperatorInstallPolicy(params: {
   };
   trustedSourceLinkedOfficialInstall?: boolean;
 }): Promise<InstallSecurityScanResult | undefined> {
-  const result = await runInstallPolicy({
-    config: params.config,
-    logger: params.logger,
-    request: {
-      targetName: params.targetName,
-      targetType: params.targetType,
-      sourcePath: params.sourcePath,
-      sourcePathKind: params.sourcePathKind,
-      ...(params.source ? { source: params.source } : {}),
-      origin: params.origin,
+  const runPolicy = async () =>
+    await runInstallPolicy({
+      config: params.config,
+      logger: params.logger,
       request: {
-        kind: params.requestKind,
-        mode: params.requestMode,
-        ...(params.requestedSpecifier ? { requestedSpecifier: params.requestedSpecifier } : {}),
+        targetName: params.targetName,
+        targetType: params.targetType,
+        sourcePath: params.sourcePath,
+        sourcePathKind: params.sourcePathKind,
+        ...(params.source ? { source: params.source } : {}),
+        origin: params.origin,
+        request: {
+          kind: params.requestKind,
+          mode: params.requestMode,
+          ...(params.requestedSpecifier ? { requestedSpecifier: params.requestedSpecifier } : {}),
+        },
+        ...(params.skill ? { skill: params.skill } : {}),
+        ...(params.plugin ? { plugin: params.plugin } : {}),
       },
-      ...(params.skill ? { skill: params.skill } : {}),
-      ...(params.plugin ? { plugin: params.plugin } : {}),
-    },
-  });
+    });
+  let result = await runPolicy();
   if (!result) {
     return undefined;
   }
@@ -909,11 +911,20 @@ async function runOperatorInstallPolicy(params: {
       ...(result.findings?.length ? { findings: result.findings } : {}),
     };
     params.logger.warn?.(`Install policy warning: ${result.reason}`);
-    if (
-      params.acknowledgeInstallPolicyWarning === true ||
-      (params.onInstallPolicyWarning && (await params.onInstallPolicyWarning(warning)))
-    ) {
+    if (params.acknowledgeInstallPolicyWarning === true) {
       return undefined;
+    }
+    if (params.onInstallPolicyWarning && (await params.onInstallPolicyWarning(warning))) {
+      result = await runPolicy();
+      if (!result || result.decision === "allow" || result.decision === "warn") {
+        return undefined;
+      }
+      return {
+        blocked: {
+          code: result.code,
+          reason: result.reason,
+        },
+      };
     }
     return { warning };
   }

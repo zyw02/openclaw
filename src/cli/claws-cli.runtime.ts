@@ -52,6 +52,7 @@ import type {
   ClawsRemoveOptions,
   ClawsStatusOptions,
 } from "./claws-cli.js";
+import { resolveClawInstallPolicyOptions } from "./claws-install-policy.js";
 import { callGatewayFromCli } from "./gateway-rpc.js";
 
 type DiagnosticLike = { level: string; code: string; path: string; message: string };
@@ -343,8 +344,14 @@ export async function runClawsAddCommand(
 
   let addResult;
   try {
+    const installPolicyOptions = resolveClawInstallPolicyOptions({
+      action: "install",
+      dangerouslyForceUnsafeInstall: opts.dangerouslyForceUnsafeInstall,
+      json: opts.json,
+    });
     addResult = await applyClawAddPlan(plan, {
       consentPlanIntegrity: opts.planIntegrity,
+      ...installPolicyOptions,
       runtime: opts.json ? { ...runtime, log: () => undefined } : runtime,
       cronGateway: {
         add: async (input) => await callGatewayFromCli("cron.add", {}, input),

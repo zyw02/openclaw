@@ -791,6 +791,25 @@ describe("installHooksFromPath", () => {
       killed: false,
       termination: "exit",
     });
+    const hooksDir = path.join(stateDir, "hooks");
+    const warning = {
+      reason: "Manual review recommended.",
+      findings: [
+        {
+          ruleId: "dangerous-exec",
+          severity: "warn" as const,
+          message: "The hook pack launches a child process.",
+        },
+      ],
+    };
+    scanInstalledPackageDependencyTreeMock.mockResolvedValueOnce({ warning });
+    expect(await installHooksFromPath({ path: pkgDir, hooksDir })).toEqual({
+      ok: false,
+      code: "install_policy_acknowledgement_required",
+      error: warning.reason,
+      installPolicyWarning: warning,
+    });
+    expect(fs.existsSync(path.join(hooksDir, "canonical-hooks"))).toBe(false);
     scanInstalledPackageDependencyTreeMock.mockResolvedValue({
       blocked: {
         code: "security_scan_blocked",
@@ -798,7 +817,6 @@ describe("installHooksFromPath", () => {
       },
     });
 
-    const hooksDir = path.join(stateDir, "hooks");
     const result = await installHooksFromPath({
       path: pkgDir,
       hooksDir,
@@ -816,7 +834,7 @@ describe("installHooksFromPath", () => {
         requestKind: "plugin-dir",
       }),
     );
-    const scanCall = scanInstalledPackageDependencyTreeMock.mock.calls[0]?.[0] as {
+    const scanCall = scanInstalledPackageDependencyTreeMock.mock.calls.at(-1)?.[0] as {
       packageDir?: string;
     };
     expect(scanCall.packageDir).toContain(".openclaw-install-stage-");

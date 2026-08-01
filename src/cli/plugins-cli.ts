@@ -10,7 +10,6 @@ import { applyParentDefaultHelpAction } from "./program/parent-default-help.js";
 type PluginUpdateOptions = {
   all?: boolean;
   acknowledgeClawhubRisk?: boolean;
-  acknowledgeInstallPolicyWarning?: boolean;
   dryRun?: boolean;
   dangerouslyForceUnsafeInstall?: boolean;
 };
@@ -182,17 +181,12 @@ export function registerPluginsCli(program: Command) {
     .option("--pin", "Record npm installs as exact resolved <name>@<version>", false)
     .option(
       "--dangerously-force-unsafe-install",
-      "Deprecated no-op; security.installPolicy may still block",
+      "Acknowledge operator install policy warnings; never overrides blocks",
       false,
     )
     .option(
       "--acknowledge-clawhub-risk",
       "Acknowledge ClawHub release trust warnings without prompting",
-      false,
-    )
-    .option(
-      "--acknowledge-install-policy-warning",
-      "Acknowledge operator install policy warnings without prompting",
       false,
     )
     .option(
@@ -204,7 +198,6 @@ export function registerPluginsCli(program: Command) {
         raw: string,
         opts: CommanderClawHubRiskOptions & {
           dangerouslyForceUnsafeInstall?: boolean;
-          acknowledgeInstallPolicyWarning?: boolean;
           force?: boolean;
           link?: boolean;
           pin?: boolean;
@@ -227,17 +220,12 @@ export function registerPluginsCli(program: Command) {
     .option("--dry-run", "Show what would change without writing", false)
     .option(
       "--dangerously-force-unsafe-install",
-      "Deprecated no-op; security.installPolicy may still block",
+      "Acknowledge operator install policy warnings; never overrides blocks",
       false,
     )
     .option(
       "--acknowledge-clawhub-risk",
       "Acknowledge ClawHub release trust warnings without prompting",
-      false,
-    )
-    .option(
-      "--acknowledge-install-policy-warning",
-      "Acknowledge operator install policy warnings without prompting",
       false,
     )
     .action(async (id: string | undefined, opts: PluginUpdateOptions) => {

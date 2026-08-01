@@ -12,6 +12,7 @@ import {
   type ExternalizedBundledPluginBridge,
 } from "./externalized-bundled-plugins.js";
 import { resolveNpmInstallSpecsForUpdateChannel } from "./install-channel-specs.js";
+import type { InstallPolicyWarning } from "./install-security-scan.js";
 import { installPluginFromNpmSpec } from "./install.js";
 import {
   buildNpmResolutionInstallFields,
@@ -61,6 +62,8 @@ export async function syncPluginsForUpdateChannel(params: {
   externalizedBundledPluginBridges?: readonly ExternalizedBundledPluginBridge[];
   acknowledgeClawHubRisk?: boolean;
   onClawHubRisk?: (request: ClawHubRiskAcknowledgementRequest) => boolean | Promise<boolean>;
+  acknowledgeInstallPolicyWarning?: boolean;
+  onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
 }): Promise<PluginChannelSyncResult> {
   const env = params.env ?? process.env;
   const logger = params.logger ?? {};
@@ -83,6 +86,12 @@ export async function syncPluginsForUpdateChannel(params: {
   const clawHubRiskAcknowledgementOptions = {
     ...(params.acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
     ...(params.onClawHubRisk ? { onClawHubRisk: params.onClawHubRisk } : {}),
+  };
+  const installPolicyAcknowledgementOptions = {
+    ...(params.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
+    ...(params.onInstallPolicyWarning
+      ? { onInstallPolicyWarning: params.onInstallPolicyWarning }
+      : {}),
   };
 
   if (params.channel === "dev") {
@@ -208,6 +217,7 @@ export async function syncPluginsForUpdateChannel(params: {
           mode: "update",
           expectedPluginId: targetPluginId,
           ...clawHubRiskAcknowledgementOptions,
+          ...installPolicyAcknowledgementOptions,
           logger,
         });
         if (!result.ok && npmSpec && shouldFallbackClawHubBridgeToNpm({ result, npmSpec })) {
@@ -222,6 +232,7 @@ export async function syncPluginsForUpdateChannel(params: {
             mode: "update",
             expectedPluginId: targetPluginId,
             trustedSourceLinkedOfficialInstall,
+            ...installPolicyAcknowledgementOptions,
             logger,
           });
         }
@@ -232,6 +243,7 @@ export async function syncPluginsForUpdateChannel(params: {
           mode: "update",
           expectedPluginId: targetPluginId,
           trustedSourceLinkedOfficialInstall,
+          ...installPolicyAcknowledgementOptions,
           logger,
         });
       }

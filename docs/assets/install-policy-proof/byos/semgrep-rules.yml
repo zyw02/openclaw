@@ -1,0 +1,8 @@
+rules:
+  - id: proof.dynamic-eval
+    message: Dynamic eval requires operator review.
+    severity: WARNING
+    languages:
+      - javascript
+      - typescript
+    pattern: eval(...)

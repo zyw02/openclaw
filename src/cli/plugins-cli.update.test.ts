@@ -236,7 +236,7 @@ describe("plugins cli update", () => {
     }
   });
 
-  it("shows the deprecated unsafe install flag in update help", () => {
+  it("shows one unsafe install acknowledgement flag in update help", () => {
     const program = new Command();
     registerPluginsCli(program);
 
@@ -245,9 +245,9 @@ describe("plugins cli update", () => {
     const helpText = updateCommand?.helpInformation() ?? "";
 
     expect(helpText).toContain("--dangerously-force-unsafe-install");
-    expect(helpText).toContain("Deprecated no-op");
-    expect(helpText).toContain("security.installPolicy");
-    expect(helpText).toContain("may still block");
+    expect(helpText).toMatch(/Acknowledge operator install policy\s+warnings/u);
+    expect(helpText).toContain("never overrides blocks");
+    expect(helpText).not.toContain("--acknowledge-install-policy-warning");
   });
 
   it("refuses plugin updates in Nix mode before package-manager work", async () => {
@@ -1072,7 +1072,7 @@ describe("plugins cli update", () => {
     expect(runtimeLogs.at(-1)).toBe("No tracked plugins or hook packs to update.");
   });
 
-  it("passes dangerous force unsafe install to plugin updates", async () => {
+  it("uses dangerous force unsafe install to acknowledge plugin update warnings", async () => {
     const config = createTrackedPluginConfig({
       pluginId: "openclaw-codex-app-server",
       spec: "openclaw-codex-app-server@beta",
@@ -1096,13 +1096,7 @@ describe("plugins cli update", () => {
     expect(updateParams.config).toEqual(config);
     expect(updateParams.pluginIds).toEqual(["openclaw-codex-app-server"]);
     expect(updateParams.dangerouslyForceUnsafeInstall).toBe(true);
-    expect(
-      runtimeLogs.some((message) =>
-        message.includes(
-          "--dangerously-force-unsafe-install is deprecated and no longer affects plugin updates",
-        ),
-      ),
-    ).toBe(true);
+    expect(updateParams.acknowledgeInstallPolicyWarning).toBe(true);
   });
 
   it.each([
@@ -1233,7 +1227,7 @@ describe("plugins cli update", () => {
       "update",
       "openclaw-codex-app-server",
       "--acknowledge-clawhub-risk",
-      "--acknowledge-install-policy-warning",
+      "--dangerously-force-unsafe-install",
     ]);
 
     expect(updateNpmInstalledPlugins).toHaveBeenCalledWith(

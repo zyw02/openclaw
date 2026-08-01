@@ -1845,6 +1845,33 @@ describe("update-cli", () => {
     ]);
   });
 
+  it("carries install-policy acknowledgement into post-core resume", async () => {
+    const { entrypoints } = setupUpdatedRootRefresh({
+      gatewayUpdateImpl: async (root) =>
+        makeOkUpdateResult({
+          mode: "git",
+          root,
+          before: { sha: "old-sha", version: "2026.4.26" },
+          after: { sha: "new-sha", version: "2026.4.27" },
+        }),
+    });
+
+    await updateCommand({
+      channel: "dev",
+      yes: true,
+      restart: false,
+      dangerouslyForceUnsafeInstall: true,
+    });
+
+    expect(spawnCall()?.[1]).toEqual([
+      entrypoints[0],
+      "update",
+      "--no-restart",
+      "--yes",
+      "--dangerously-force-unsafe-install",
+    ]);
+  });
+
   it("keeps downgrade post-update work in the current process", async () => {
     const downgradedRoot = createCaseDir("openclaw-downgraded-root");
     setupUpdatedRootRefresh({
@@ -5878,6 +5905,25 @@ describe("update-cli", () => {
     );
   });
 
+  it("forwards install-policy acknowledgement to post-update plugin work", async () => {
+    const tempDir = createCaseDir("openclaw-update");
+    mockPackageInstallStatus(tempDir);
+
+    await updateCommand({
+      channel: "beta",
+      yes: true,
+      restart: false,
+      dangerouslyForceUnsafeInstall: true,
+    });
+
+    expect(syncPluginCall()?.acknowledgeInstallPolicyWarning).toBe(true);
+    expect(npmPluginUpdateCall()?.acknowledgeInstallPolicyWarning).toBe(true);
+    expect(lastNpmPluginUpdateCall()?.acknowledgeInstallPolicyWarning).toBe(true);
+    expect(runPostCorePluginConvergenceSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ acknowledgeInstallPolicyWarning: true }),
+    );
+  });
+
   it.each([
     {
       name: "stdout is not interactive",
@@ -6588,6 +6634,7 @@ describe("update-cli", () => {
           timeout: "9",
           restart: false,
           acknowledgeClawHubRisk: true,
+          dangerouslyForceUnsafeInstall: true,
         });
 
         expect(doctorEnv?.OPENCLAW_UPDATE_IN_PROGRESS).toBe("1");
@@ -6605,6 +6652,7 @@ describe("update-cli", () => {
         });
         expect(syncPluginCall()?.channel).toBe("stable");
         expect(syncPluginCall()?.acknowledgeClawHubRisk).toBe(true);
+        expect(syncPluginCall()?.acknowledgeInstallPolicyWarning).toBe(true);
         expect(lastNpmPluginUpdateCall()?.timeoutMs).toBe(9_000);
         expect(
           vi
@@ -6612,6 +6660,7 @@ describe("update-cli", () => {
             .mock.calls.some(([options]) => options?.skipPluginValidation === true),
         ).toBe(true);
         expect(lastNpmPluginUpdateCall()?.acknowledgeClawHubRisk).toBe(true);
+        expect(lastNpmPluginUpdateCall()?.acknowledgeInstallPolicyWarning).toBe(true);
         const output = lastWriteJsonCall() as
           | {
               status?: string;

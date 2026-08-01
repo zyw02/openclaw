@@ -2,6 +2,7 @@
 import path from "node:path";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { uniqueStrings } from "@openclaw/normalization-core/string-normalization";
+import type { PluginsInstallParams } from "../../packages/gateway-protocol/src/schema/plugins.js";
 import { MANIFEST_KEY } from "../compat/legacy-names.js";
 import { collectChangedPaths } from "../config/config-change-paths.js";
 import {
@@ -36,7 +37,12 @@ import {
   type ConfigSnapshotForInstallPersist,
 } from "./install-persistence.js";
 import { commitPluginInstallRecordsWithConfig } from "./install-record-commit.js";
-import type { InstallPolicyWarning, InstallSafetyOverrides } from "./install-security-scan.js";
+import {
+  scanBundleInstallSource,
+  type InstallPolicyWarning,
+  type InstallSafetyOverrides,
+} from "./install-security-scan.js";
+import { runInstallSourceScan } from "./install-shared.js";
 import type { PluginInstallLogger } from "./install-types.js";
 import {
   installPluginFromNpmPackArchive,
@@ -114,19 +120,7 @@ type ManagedPluginCatalog = {
   mutationAllowed: boolean;
 };
 
-type ManagedPluginInstallRequest =
-  | {
-      source: "clawhub";
-      packageName: string;
-      version?: string;
-      acknowledgeClawHubRisk?: boolean;
-      acknowledgeInstallPolicyWarning?: boolean;
-    }
-  | {
-      source: "official";
-      pluginId: string;
-      acknowledgeInstallPolicyWarning?: boolean;
-    };
+type ManagedPluginInstallRequest = PluginsInstallParams;
 
 export type ManagedPluginSourceInstallRequest =
   | {
@@ -156,6 +150,7 @@ export type ManagedPluginSourceInstallRequest =
       source: "bundled";
       rawSpec: string;
       bundledSource: BundledPluginSource;
+      mode: "install" | "update";
       warning?: string;
     }
   | {
@@ -1126,6 +1121,28 @@ export async function installManagedPluginSource(params: {
   const { request } = params;
   const extensionsDir = resolveDefaultPluginExtensionsDir(params.env ?? process.env);
   if (request.source === "bundled") {
+    const scanFailure = await runInstallSourceScan({
+      subject: `Bundled plugin "${request.bundledSource.pluginId}"`,
+      pluginId: request.bundledSource.pluginId,
+      mode: request.mode,
+      sourceFamily: "directory",
+      scan: async () =>
+        await scanBundleInstallSource({
+          ...params.safetyOverrides,
+          config: params.safetyOverrides?.config ?? params.snapshot.config,
+          logger: params.logger ?? {},
+          pluginId: request.bundledSource.pluginId,
+          sourceDir: request.bundledSource.localPath,
+          requestKind: "plugin-dir",
+          requestedSpecifier: request.rawSpec,
+          mode: request.mode,
+          version: request.bundledSource.version,
+          source: { kind: "bundled", authority: "openclaw", mutable: false, network: false },
+        }),
+    });
+    if (scanFailure) {
+      return scanFailure;
+    }
     const result = await installBundledPluginSource({
       snapshot: params.snapshot,
       rawSpec: request.rawSpec,

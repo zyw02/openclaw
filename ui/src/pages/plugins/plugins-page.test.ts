@@ -453,6 +453,9 @@ describe("PluginsPage", () => {
                     ruleId: "dangerous-exec",
                     severity: "warn",
                     message: "The package launches a child process.",
+                    file: "index.js",
+                    line: 12,
+                    evidence: "exec(userInput)",
                   },
                 ],
               },
@@ -479,7 +482,9 @@ describe("PluginsPage", () => {
 
     const warning = page.querySelector<HTMLElement>('[data-plugin-id="workboard"] [role="alert"]');
     expect(warning?.textContent).toContain("Manual review recommended.");
+    expect(warning?.textContent).toContain("WARN · dangerous-exec · index.js:12");
     expect(warning?.textContent).toContain("The package launches a child process.");
+    expect(warning?.textContent).toContain("exec(userInput)");
     warning?.querySelector<HTMLButtonElement>("button")?.click();
 
     await waitForFast(() => expect(installAttempts).toBe(2));

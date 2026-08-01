@@ -5,6 +5,8 @@ import {
   buildInstallPolicyWarningDetails,
   ErrorCodes,
   errorShape,
+  type SkillsInstallParams,
+  type SkillsUpdateParams,
   validateSkillsBinsParams,
   validateSkillsCuratorActionParams,
   validateSkillsCuratorStatusParams,
@@ -78,6 +80,13 @@ import type { GatewayRequestHandlerOptions, GatewayRequestHandlers, RespondFn } 
 import { assertValidParams } from "./validation.js";
 
 type ClawHubInstallResult = Awaited<ReturnType<typeof installSkillFromClawHub>>;
+type LegacySkillsInstallParams = Extract<SkillsInstallParams, { installId: string }>;
+
+function isLegacySkillsInstallParams(
+  params: SkillsInstallParams,
+): params is LegacySkillsInstallParams {
+  return !("source" in params);
+}
 type ClawHubInstallParams = Parameters<typeof installSkillFromClawHub>[0];
 
 const clawHubInstallsInFlight = new Map<string, Promise<ClawHubInstallResult>>();
@@ -134,6 +143,10 @@ function collectClawHubTrustWarnings(results: Array<{ warning?: string }>): stri
   return results
     .map((result) => normalizeOptionalString(result.warning))
     .filter((warning): warning is string => Boolean(warning));
+}
+
+function installPolicyGatewayErrorCode(installPolicyWarning: unknown) {
+  return installPolicyWarning ? ErrorCodes.INVALID_REQUEST : ErrorCodes.UNAVAILABLE;
 }
 
 function buildRevisionAgentInstruction(
@@ -656,15 +669,8 @@ export const skillsHandlers: GatewayRequestHandlers = {
     const workspaceDirRaw = resolved.workspaceDir;
     // Skill installs are intentionally routed by source; each source owns its
     // validation, provenance checks, and result payload shape.
-    if (params && typeof params === "object" && "source" in params && params.source === "clawhub") {
-      const p = params as {
-        source: "clawhub";
-        slug: string;
-        version?: string;
-        force?: boolean;
-        acknowledgeClawHubRisk?: boolean;
-        acknowledgeInstallPolicyWarning?: boolean;
-      };
+    if ("source" in params && params.source === "clawhub") {
+      const p: Extract<SkillsInstallParams, { source: "clawhub" }> = params;
       const result = await installClawHubSkillDeduped({
         workspaceDir: workspaceDirRaw,
         slug: p.slug,
@@ -702,20 +708,16 @@ export const skillsHandlers: GatewayRequestHandlers = {
           : result,
         result.ok
           ? undefined
-          : errorShape(ErrorCodes.UNAVAILABLE, result.error, details ? { details } : undefined),
+          : errorShape(
+              installPolicyGatewayErrorCode(result.installPolicyWarning),
+              result.error,
+              details ? { details } : undefined,
+            ),
       );
       return;
     }
-    if (params && typeof params === "object" && "source" in params && params.source === "upload") {
-      const p = params as {
-        source: "upload";
-        uploadId: string;
-        slug: string;
-        force?: boolean;
-        sha256?: string;
-        timeoutMs?: number;
-        acknowledgeInstallPolicyWarning?: boolean;
-      };
+    if ("source" in params && params.source === "upload") {
+      const p: Extract<SkillsInstallParams, { source: "upload" }> = params;
       const result = await installUploadedSkillArchive({
         uploadId: p.uploadId,
         slug: p.slug,
@@ -728,7 +730,8 @@ export const skillsHandlers: GatewayRequestHandlers = {
         ...(p.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
       });
       const errorCode =
-        !result.ok && result.errorKind === "invalid-request"
+        !result.ok &&
+        (result.errorKind === "invalid-request" || Boolean(result.installPolicyWarning))
           ? ErrorCodes.INVALID_REQUEST
           : ErrorCodes.UNAVAILABLE;
       const responseResult = result.ok
@@ -756,12 +759,15 @@ export const skillsHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const p = params as {
-      name: string;
-      installId: string;
-      timeoutMs?: number;
-      acknowledgeInstallPolicyWarning?: boolean;
-    };
+    if (!isLegacySkillsInstallParams(params)) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "unsupported skills.install source"),
+      );
+      return;
+    }
+    const p = params;
     const result = await installSkill({
       workspaceDir: workspaceDirRaw,
       skillName: p.name,
@@ -781,7 +787,7 @@ export const skillsHandlers: GatewayRequestHandlers = {
       result.ok
         ? undefined
         : errorShape(
-            ErrorCodes.UNAVAILABLE,
+            installPolicyGatewayErrorCode(result.installPolicyWarning),
             result.message,
             installPolicyDetails ? { details: installPolicyDetails } : undefined,
           ),
@@ -791,14 +797,8 @@ export const skillsHandlers: GatewayRequestHandlers = {
     if (!assertValidParams(params, validateSkillsUpdateParams, "skills.update", respond)) {
       return;
     }
-    if (params && typeof params === "object" && "source" in params && params.source === "clawhub") {
-      const p = params as {
-        source: "clawhub";
-        slug?: string;
-        all?: boolean;
-        acknowledgeClawHubRisk?: boolean;
-        acknowledgeInstallPolicyWarning?: boolean;
-      };
+    if ("source" in params && params.source === "clawhub") {
+      const p: Extract<SkillsUpdateParams, { source: "clawhub" }> = params;
       if (!p.slug && !p.all) {
         respond(
           false,
@@ -854,13 +854,17 @@ export const skillsHandlers: GatewayRequestHandlers = {
         },
         errors.length === 0
           ? undefined
-          : errorShape(ErrorCodes.UNAVAILABLE, errors.map((result) => result.error).join("; "), {
-              details: {
-                results,
-                ...(warnings.length > 0 ? { warnings } : {}),
-                ...installPolicyDetails,
+          : errorShape(
+              installPolicyGatewayErrorCode(installPolicyDetails),
+              errors.map((result) => result.error).join("; "),
+              {
+                details: {
+                  results,
+                  ...(warnings.length > 0 ? { warnings } : {}),
+                  ...installPolicyDetails,
+                },
               },
-            }),
+            ),
       );
       return;
     }

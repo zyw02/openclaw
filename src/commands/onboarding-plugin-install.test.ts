@@ -112,9 +112,14 @@ vi.mock("../plugins/installed-plugin-index-records.js", () => ({
   clearLoadInstalledPluginIndexInstallRecordsCache,
 }));
 
-const withTimeout = vi.hoisted(() => vi.fn(async <T>(promise: Promise<T>) => await promise));
-vi.mock("../utils/with-timeout.js", () => ({
-  withTimeout,
+const runWithPausableInstallWatchdog = vi.hoisted(() =>
+  vi.fn(
+    async <T>(run: (withHumanPrompt: <R>(prompt: () => Promise<R>) => Promise<R>) => Promise<T>) =>
+      await run(async (prompt) => await prompt()),
+  ),
+);
+vi.mock("./onboarding-install-watchdog.js", () => ({
+  runWithPausableInstallWatchdog,
 }));
 
 import { ensureOnboardingPluginInstalled } from "./onboarding-plugin-install.js";
@@ -160,6 +165,7 @@ type NpmPackInstallCall = {
   archivePath?: string;
   config?: OpenClawConfig;
   expectedPluginId?: string;
+  onInstallPolicyWarning?: (warning: { reason: string }) => boolean | Promise<boolean>;
   trustedSourceLinkedOfficialInstall?: boolean;
 };
 
@@ -168,6 +174,7 @@ type NpmSpecInstallCall = {
   expectedIntegrity?: string;
   expectedPluginId?: string;
   mode?: string;
+  onInstallPolicyWarning?: (warning: { reason: string }) => boolean | Promise<boolean>;
   spec?: string;
   timeoutMs?: number;
   trustedSourceLinkedOfficialInstall?: boolean;
@@ -181,6 +188,7 @@ type ClawHubInstallCall = {
     warn?: (message: string) => void;
   };
   mode?: string;
+  onInstallPolicyWarning?: (warning: { reason: string }) => boolean | Promise<boolean>;
   onClawHubRisk?: (request: {
     acknowledgementKind: "confirm" | "type-package";
     packageName: string;
@@ -219,7 +227,11 @@ describe("ensureOnboardingPluginInstalled", () => {
     vi.clearAllMocks();
     delete process.env.OPENCLAW_ALLOW_PLUGIN_INSTALL_OVERRIDES;
     delete process.env.OPENCLAW_PLUGIN_INSTALL_OVERRIDES;
-    withTimeout.mockImplementation(async <T>(promise: Promise<T>) => await promise);
+    runWithPausableInstallWatchdog.mockImplementation(
+      async <T>(
+        run: (withHumanPrompt: <R>(prompt: () => Promise<R>) => Promise<R>) => Promise<T>,
+      ) => await run(async (prompt) => await prompt()),
+    );
     invalidatePluginRuntimeDiscoveryAfterConfigMutation.mockResolvedValue(undefined);
   });
 
@@ -558,6 +570,7 @@ describe("ensureOnboardingPluginInstalled", () => {
     expect(clawHubCall.mode).toBe("install");
     expect(clawHubCall.timeoutMs).toBe(300_000);
     expect(typeof clawHubCall.onClawHubRisk).toBe("function");
+    expect(typeof clawHubCall.onInstallPolicyWarning).toBe("function");
     expect(update).toHaveBeenCalledWith("Downloading");
     expect(stop).toHaveBeenCalledWith("Installed Demo Provider plugin");
     const [, recordUpdate] = readFirstMockCall(recordPluginInstall, "recordPluginInstall") as [
@@ -876,7 +889,7 @@ describe("ensureOnboardingPluginInstalled", () => {
   it("returns a timed out status and notes the retry path when npm install hangs", async () => {
     const note = vi.fn(async () => {});
     const stop = vi.fn();
-    withTimeout.mockRejectedValue(new Error("timeout"));
+    runWithPausableInstallWatchdog.mockRejectedValue(new Error("timeout"));
 
     const result = await ensureOnboardingPluginInstalled({
       cfg: {},

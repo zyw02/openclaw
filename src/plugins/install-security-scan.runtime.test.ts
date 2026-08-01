@@ -216,7 +216,7 @@ describe("install security scan official bypass", () => {
     expect(runInstallPolicyMock).toHaveBeenCalledTimes(2);
   });
 
-  it("uses the interactive acknowledgement callback for operator warnings", async () => {
+  it("reruns policy after interactive acknowledgement", async () => {
     runInstallPolicyMock.mockResolvedValue({
       decision: "warn",
       reason: "scanner found risky behavior",
@@ -235,6 +235,36 @@ describe("install security scan official bypass", () => {
     expect(onInstallPolicyWarning).toHaveBeenCalledWith({
       reason: "scanner found risky behavior",
     });
+    expect(runInstallPolicyMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not let interactive acknowledgement override a block returned on rerun", async () => {
+    runInstallPolicyMock
+      .mockResolvedValueOnce({
+        decision: "warn",
+        reason: "scanner found risky behavior",
+      })
+      .mockResolvedValueOnce({
+        decision: "block",
+        code: "security_scan_blocked",
+        reason: "blocked after operator review",
+      });
+
+    const result = await scanBundleInstallSourceRuntime({
+      logger: {},
+      onInstallPolicyWarning: vi.fn().mockResolvedValue(true),
+      pluginId: "third-party",
+      source: { kind: "npm", authority: "official", mutable: false, network: true },
+      sourceDir: "/tmp/third-party",
+    });
+
+    expect(result).toEqual({
+      blocked: {
+        code: "security_scan_blocked",
+        reason: "blocked after operator review",
+      },
+    });
+    expect(runInstallPolicyMock).toHaveBeenCalledTimes(2);
   });
 
   it("returns operator warnings from the post-resolution dependency-tree scan", async () => {

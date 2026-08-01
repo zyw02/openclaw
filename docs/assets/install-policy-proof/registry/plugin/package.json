@@ -1,0 +1,13 @@
+{
+  "name": "openclaw-policy-proof-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  },
+  "dependencies": {
+    "openclaw-policy-proof-dependency": "1.0.0"
+  }
+}

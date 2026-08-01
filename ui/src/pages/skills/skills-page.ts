@@ -31,6 +31,7 @@ import {
   type ClawHubSearchResult,
   type ClawHubSkillDetail,
   type ClawHubSkillSecurityVerdict,
+  type ClawHubInstallMessage,
   type SkillOperation,
   type SkillMessageMap,
 } from "../../lib/skills/index.ts";
@@ -81,15 +82,7 @@ class SkillsPage extends OpenClawLightDomElement {
   @state() clawhubDetailSlug: string | null = null;
   @state() clawhubDetailLoading = false;
   @state() clawhubDetailError: string | null = null;
-  @state() clawhubInstallMessage: {
-    kind: "success" | "error";
-    text: string;
-    acknowledgeSlug?: string;
-    acknowledgeVersion?: string;
-    acknowledgeLabel?: string;
-    acknowledgeClawHubRisk?: boolean;
-    acknowledgeInstallPolicyWarning?: boolean;
-  } | null = null;
+  @state() clawhubInstallMessage: ClawHubInstallMessage | null = null;
   @state() clawhubVerdicts: Record<string, ClawHubSkillSecurityVerdict> = {};
   @state() clawhubVerdictsLoading = false;
   @state() clawhubVerdictsError: string | null = null;

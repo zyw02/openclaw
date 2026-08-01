@@ -536,7 +536,7 @@ describe("skill upload gateway handlers", () => {
 
     expect(warning.ok).toBe(false);
     expect(warning.error).toMatchObject({
-      code: "UNAVAILABLE",
+      code: "INVALID_REQUEST",
       details: {
         installPolicyWarning: {
           reason: "Manual review recommended.",

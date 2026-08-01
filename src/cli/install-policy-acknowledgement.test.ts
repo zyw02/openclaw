@@ -38,7 +38,7 @@ describe("resolveInstallPolicyAcknowledgementCliOptions", () => {
     setTty(true);
 
     const options = resolveInstallPolicyAcknowledgementCliOptions({
-      acknowledgeInstallPolicyWarning: true,
+      dangerouslyForceUnsafeInstall: true,
       action: "install",
     });
 
@@ -70,10 +70,31 @@ describe("resolveInstallPolicyAcknowledgementCliOptions", () => {
     await expect(
       options.onInstallPolicyWarning?.({
         reason: "Review\nthis\u001b[2K package.",
+        findings: [
+          {
+            ruleId: "dangerous\u001b[2K-exec",
+            severity: "critical",
+            message: "Launches\nan executable.",
+            file: "index\u001b[2K.js",
+            line: 12,
+            evidence: "exec(\ncommand)",
+          },
+          {
+            ruleId: "network-access",
+            severity: "info",
+            message: "Connects to the network.",
+          },
+        ],
       }),
     ).resolves.toBe(true);
     expect(promptYesNoMock).toHaveBeenCalledWith(
-      "Install after this policy warning?\nReview\\nthis package.",
+      [
+        "Install after this policy warning?",
+        "Review\\nthis package.",
+        "• [CRITICAL · dangerous-exec · index.js:12] Launches\\nan executable.",
+        "  ↳ exec(\\ncommand)",
+        "• [INFO · network-access] Connects to the network.",
+      ].join("\n"),
     );
   });
 });

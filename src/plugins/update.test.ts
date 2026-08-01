@@ -63,6 +63,7 @@ vi.mock("./install.js", () => ({
   PLUGIN_INSTALL_ERROR_CODE: {
     NPM_METADATA_FAILURE: "npm_metadata_failure",
     NPM_PACKAGE_NOT_FOUND: "npm_package_not_found",
+    INSTALL_POLICY_ACKNOWLEDGEMENT_REQUIRED: "install_policy_acknowledgement_required",
   },
 }));
 
@@ -269,6 +270,7 @@ function createEnabledDemoClawHubInstallConfig(): OpenClawConfig {
   const installPath = createInstalledPackageDir({
     name: "demo",
     version: "1.2.3",
+    runnable: true,
   });
   const config = createClawHubInstallConfig({ installPath });
   config.plugins = {
@@ -2812,6 +2814,43 @@ describe("updateNpmInstalledPlugins", () => {
         message: `Skipped demo ClawHub update: ${error} Existing installed plugin left unchanged.`,
       },
     ]);
+  });
+
+  it("keeps an existing versionless plugin enabled when install policy requires acknowledgement", async () => {
+    installPluginFromClawHubMock.mockResolvedValue({
+      ok: false,
+      code: "install_policy_acknowledgement_required",
+      error: "Manual review recommended.",
+      installPolicyWarning: {
+        reason: "Manual review recommended.",
+      },
+    });
+    const config = createEnabledDemoClawHubInstallConfig();
+    const installPath = expectDefined(
+      config.plugins?.installs?.demo?.installPath,
+      "demo install path test invariant",
+    );
+    const manifestPath = path.join(installPath, "package.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    delete manifest.version;
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest), "utf8");
+
+    const result = await updatePlugin(config, "demo", { disableOnFailure: true });
+
+    expect(result.outcomes).toEqual([
+      {
+        pluginId: "demo",
+        status: "error",
+        code: "install_policy_acknowledgement_required",
+        message: "Failed to update demo: Manual review recommended. (ClawHub clawhub:demo).",
+      },
+    ]);
+    expect(result.changed).toBe(false);
+    expect(result.config).toBe(config);
+    expect(result.config.plugins?.entries?.demo).toEqual({
+      enabled: true,
+      config: { preserved: true },
+    });
   });
 
   it("does not skip a risk-gated ClawHub update when the installed package is missing", async () => {

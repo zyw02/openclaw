@@ -210,6 +210,7 @@ describe("skills-clawhub", () => {
     installPackageDirMock.mockReset();
     evaluateSkillInstallPolicyMock.mockReset();
     pathExistsMock.mockReset();
+    digestClawHubSkillTreeMock.mockClear();
 
     resolveClawHubBaseUrlMock.mockImplementation((baseUrl?: string) =>
       (baseUrl ?? "https://clawhub.ai").replace(/\/+$/, ""),
@@ -337,6 +338,77 @@ describe("skills-clawhub", () => {
       slug: "agentreceipt",
       version: "1.0.0",
     });
+  });
+
+  it("does not persist warned ClawHub installs before acknowledgement and keeps reevaluated blocks terminal", async () => {
+    const warning = {
+      reason: "ClawHub source review required",
+      findings: [
+        {
+          ruleId: "proof.clawhub",
+          severity: "warn" as const,
+          message: "Review the extracted ClawHub skill.",
+        },
+      ],
+    };
+    evaluateSkillInstallPolicyMock.mockResolvedValueOnce({ warning });
+
+    const first = await installSkillFromClawHub({
+      workspaceDir: "/tmp/workspace",
+      slug: "agentreceipt",
+    });
+
+    expect(first).toMatchObject({
+      ok: false,
+      error: warning.reason,
+      installPolicyWarning: warning,
+    });
+    expect(installPackageDirMock).not.toHaveBeenCalled();
+    expect(digestClawHubSkillTreeMock).not.toHaveBeenCalled();
+    expect(reportClawHubSkillInstallTelemetryMock).not.toHaveBeenCalled();
+
+    evaluateSkillInstallPolicyMock.mockImplementationOnce(
+      async (params: { acknowledgeInstallPolicyWarning?: boolean }) => {
+        expect(params.acknowledgeInstallPolicyWarning).toBe(true);
+        return undefined;
+      },
+    );
+    const acknowledged = await installSkillFromClawHub({
+      workspaceDir: "/tmp/workspace",
+      slug: "agentreceipt",
+      acknowledgeInstallPolicyWarning: true,
+    });
+
+    expectInstalledSkill(acknowledged, {
+      slug: "agentreceipt",
+      version: "1.0.0",
+      targetDir: "/tmp/workspace/skills/agentreceipt",
+    });
+    expect(evaluateSkillInstallPolicyMock).toHaveBeenCalledTimes(2);
+    expect(installPackageDirMock).toHaveBeenCalledTimes(1);
+    expect(digestClawHubSkillTreeMock).toHaveBeenCalledTimes(1);
+    expect(reportClawHubSkillInstallTelemetryMock).toHaveBeenCalledTimes(1);
+
+    evaluateSkillInstallPolicyMock.mockResolvedValueOnce({
+      blocked: {
+        code: "security_scan_blocked",
+        reason: "ClawHub source blocked on re-evaluation",
+      },
+    });
+    const blocked = await installSkillFromClawHub({
+      workspaceDir: "/tmp/workspace",
+      slug: "agentreceipt",
+      acknowledgeInstallPolicyWarning: true,
+      force: true,
+    });
+
+    expect(blocked).toMatchObject({
+      ok: false,
+      error: "ClawHub source blocked on re-evaluation",
+    });
+    expect(installPackageDirMock).toHaveBeenCalledTimes(1);
+    expect(digestClawHubSkillTreeMock).toHaveBeenCalledTimes(1);
+    expect(reportClawHubSkillInstallTelemetryMock).toHaveBeenCalledTimes(1);
   });
 
   it("installs skills-sh references via a ClawHub-approved pinned GitHub commit", async () => {

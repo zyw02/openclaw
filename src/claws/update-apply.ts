@@ -4,6 +4,7 @@ import { stableStringify } from "../agents/stable-stringify.js";
 import { transformConfigFileWithRetry } from "../config/config.js";
 import type { AgentConfig } from "../config/types.agents.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import type { InstallPolicyWarning } from "../plugins/install-security-scan.js";
 import type { OpenClawStateDatabaseOptions } from "../state/openclaw-state-db.js";
 import {
   applyClawCronUpdate,
@@ -108,6 +109,8 @@ export async function applyClawUpdatePlan(
     applyCron?: typeof applyClawCronUpdate;
     applyPackage?: typeof applyClawPackageUpdate;
     cronGateway?: ClawCronGateway;
+    acknowledgeInstallPolicyWarning?: boolean;
+    onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
   },
 ): Promise<ClawUpdateResult> {
   if (options.consentPlanIntegrity !== plan.planIntegrity) {

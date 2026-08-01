@@ -285,6 +285,52 @@ describe("setupSkills", () => {
     expect(installNote?.message).not.toContain("repo-helper");
   });
 
+  it("shows policy findings and confirms before continuing a dependency install", async () => {
+    mockMissingBrewStatus([
+      createBundledSkill({
+        name: "node-helper",
+        description: "Node helper",
+        bins: ["node-helper"],
+        installLabel: "Install node-helper",
+        installKind: "node",
+      }),
+    ]);
+    mocks.installSkill.mockImplementationOnce(async (params) => {
+      const acknowledged = await params.onInstallPolicyWarning?.({
+        reason: "Manual review required.",
+        findings: [
+          {
+            ruleId: "dangerous-exec",
+            severity: "warn",
+            message: "Launches a child process.",
+          },
+        ],
+      });
+      return {
+        ok: acknowledged === true,
+        message: acknowledged ? "Installed" : "Manual review required.",
+        stdout: "",
+        stderr: "",
+        code: acknowledged ? 0 : 1,
+      };
+    });
+
+    const { prompter, notes } = createPrompter({ configure: true });
+    await setupSkills({} as OpenClawConfig, "/tmp/ws", runtime, prompter);
+
+    expect(notes).toContainEqual({
+      title: "Install policy warning",
+      message: [
+        "Manual review required.",
+        "• [WARN · dangerous-exec] Launches a child process.",
+      ].join("\n"),
+    });
+    expect(prompter.confirm).toHaveBeenCalledWith({
+      message: "Continue after reviewing this install policy warning?",
+      initialValue: false,
+    });
+  });
+
   it("rechecks persistent-effect authority immediately before each dependency install", async () => {
     mockMissingBrewStatus([
       createBundledSkill({

@@ -39,6 +39,7 @@ import {
   type ClawHubSkillSecurityVerdict,
   type ClawHubSearchResult,
   type ClawHubSkillDetail,
+  type ClawHubInstallMessage,
   type SkillOperation,
   type SkillMessageMap,
 } from "../../lib/skills/index.ts";
@@ -82,15 +83,7 @@ type SkillsProps = {
   clawhubDetailSlug: string | null;
   clawhubDetailLoading: boolean;
   clawhubDetailError: string | null;
-  clawhubInstallMessage: {
-    kind: "success" | "error";
-    text: string;
-    acknowledgeSlug?: string;
-    acknowledgeVersion?: string;
-    acknowledgeLabel?: string;
-    acknowledgeClawHubRisk?: boolean;
-    acknowledgeInstallPolicyWarning?: boolean;
-  } | null;
+  clawhubInstallMessage: ClawHubInstallMessage | null;
   onFilterChange: (next: string) => void;
   onAgentChange: (agentId: string) => void;
   onStatusFilterChange: (next: SkillsStatusFilter) => void;

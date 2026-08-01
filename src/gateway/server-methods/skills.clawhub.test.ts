@@ -409,7 +409,7 @@ describe("skills gateway handlers (clawhub)", () => {
 
     expect(ok).toBe(false);
     expect(error).toMatchObject({
-      code: "UNAVAILABLE",
+      code: "INVALID_REQUEST",
       message: "Manual review recommended.",
       details: {
         installPolicyWarning: {
@@ -486,6 +486,41 @@ describe("skills gateway handlers (clawhub)", () => {
     const result = response as { ok?: boolean; message?: string } | undefined;
     expect(result?.ok).toBe(true);
     expect(result?.message).toBe("Installed");
+  });
+
+  it("classifies legacy skill install-policy warnings as invalid requests", async () => {
+    installSkillMock.mockResolvedValue({
+      ok: false,
+      message: "Manual review recommended.",
+      stdout: "",
+      stderr: "",
+      code: 1,
+      installPolicyWarning: {
+        reason: "Manual review recommended.",
+        findings: [
+          {
+            ruleId: "dangerous-exec",
+            severity: "warn",
+            message: "The installer launches a child process.",
+          },
+        ],
+      },
+    });
+
+    const { ok, error } = await callSkillsHandler("skills.install", {
+      name: "calendar",
+      installId: "deps",
+    });
+
+    expect(ok).toBe(false);
+    expect(error).toMatchObject({
+      code: "INVALID_REQUEST",
+      details: {
+        installPolicyWarning: {
+          reason: "Manual review recommended.",
+        },
+      },
+    });
   });
 
   it("updates ClawHub skills through skills.update", async () => {
@@ -638,7 +673,7 @@ describe("skills gateway handlers (clawhub)", () => {
 
     expect(ok).toBe(false);
     expect(error).toMatchObject({
-      code: "UNAVAILABLE",
+      code: "INVALID_REQUEST",
       message: "Manual review recommended.",
       details: {
         installPolicyWarning: {

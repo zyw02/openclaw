@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { refreshOnboardRecommendationsCommand } from "../commands/onboard-recommendations.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import type { InstallPolicyWarning } from "../plugins/install-security-scan.js";
 import type { RuntimeEnv } from "../runtime.js";
 import type {
   OnboardingRecommendationMatch,
@@ -480,12 +481,16 @@ describe("setupAppRecommendations", () => {
       pluginId: "chat-plugin",
       status: "installed" as const,
     }));
-    const installSkill = vi.fn(async () => ({
-      ok: true as const,
-      slug: "chat-skill",
-      version: "1.0.0",
-      targetDir: "/tmp/workspace/skills/chat-skill",
-    }));
+    const installSkill = vi.fn(
+      async (_params: {
+        onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
+      }) => ({
+        ok: true as const,
+        slug: "chat-skill",
+        version: "1.0.0",
+        targetDir: "/tmp/workspace/skills/chat-skill",
+      }),
+    );
 
     const outcome = await setupAppRecommendationsWithOutcome({
       config,
@@ -513,7 +518,25 @@ describe("setupAppRecommendations", () => {
     expect(ensurePlugin).toHaveBeenCalledOnce();
     expect(installSkill).toHaveBeenCalledOnce();
     expect(installSkill).toHaveBeenCalledWith(
-      expect.objectContaining({ slug: "@demo-owner/chat-skill" }),
+      expect.objectContaining({
+        slug: "@demo-owner/chat-skill",
+        onInstallPolicyWarning: expect.any(Function),
+      }),
+    );
+    const skillInstallRequest = installSkill.mock.calls[0]?.[0];
+    await skillInstallRequest?.onInstallPolicyWarning?.({
+      reason: "Manual review required.",
+      findings: [
+        {
+          ruleId: "dangerous-exec",
+          severity: "warn",
+          message: "Launches a child process.",
+        },
+      ],
+    });
+    expect(prompter.note).toHaveBeenCalledWith(
+      ["Manual review required.", "• [WARN · dangerous-exec] Launches a child process."].join("\n"),
+      "Install policy warning",
     );
     expect(store.writeOffer).toHaveBeenNthCalledWith(
       1,

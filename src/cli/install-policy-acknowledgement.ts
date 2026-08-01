@@ -1,3 +1,4 @@
+import { formatInstallPolicyWarningDetails } from "../../packages/gateway-protocol/src/install-policy-warning-details.js";
 import { sanitizeTerminalText } from "../../packages/terminal-core/src/safe-text.js";
 import type { InstallPolicyWarning } from "../plugins/install-security-scan.js";
 import { promptYesNo } from "./prompt.js";
@@ -7,14 +8,14 @@ function canPromptForInstallPolicyWarning(): boolean {
 }
 
 export function resolveInstallPolicyAcknowledgementCliOptions(params: {
-  acknowledgeInstallPolicyWarning?: boolean;
+  dangerouslyForceUnsafeInstall?: boolean;
   action: "install" | "update";
   allowPrompt?: boolean;
 }): {
   acknowledgeInstallPolicyWarning?: boolean;
   onInstallPolicyWarning?: (warning: InstallPolicyWarning) => Promise<boolean>;
 } {
-  if (params.acknowledgeInstallPolicyWarning === true) {
+  if (params.dangerouslyForceUnsafeInstall === true) {
     return { acknowledgeInstallPolicyWarning: true };
   }
   if (params.allowPrompt === false || !canPromptForInstallPolicyWarning()) {
@@ -23,7 +24,10 @@ export function resolveInstallPolicyAcknowledgementCliOptions(params: {
   return {
     onInstallPolicyWarning: async (warning) =>
       await promptYesNo(
-        `${params.action === "install" ? "Install" : "Update"} after this policy warning?\n${sanitizeTerminalText(warning.reason)}`,
+        `${params.action === "install" ? "Install" : "Update"} after this policy warning?\n${formatInstallPolicyWarningDetails(
+          warning,
+          sanitizeTerminalText,
+        )}`,
       ),
   };
 }

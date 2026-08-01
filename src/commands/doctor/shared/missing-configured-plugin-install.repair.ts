@@ -3,6 +3,7 @@ import { stripAnsi } from "../../../../packages/terminal-core/src/ansi.js";
 import type { OpenClawConfig } from "../../../config/types.openclaw.js";
 import type { PluginInstallRecord } from "../../../config/types.plugins.js";
 import type { ClawHubRiskAcknowledgementRequest } from "../../../plugins/clawhub.js";
+import type { InstallPolicyWarning } from "../../../plugins/install-security-scan.js";
 import { writePersistedInstalledPluginIndexInstallRecords } from "../../../plugins/installed-plugin-index-records.js";
 import { updateNpmInstalledPlugins } from "../../../plugins/update.js";
 import { resolveUserPath } from "../../../utils.js";
@@ -68,6 +69,8 @@ export async function repairMissingConfiguredPluginInstalls(params: {
   env?: NodeJS.ProcessEnv;
   acknowledgeClawHubRisk?: boolean;
   onClawHubRisk?: (request: ClawHubRiskAcknowledgementRequest) => boolean | Promise<boolean>;
+  acknowledgeInstallPolicyWarning?: boolean;
+  onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
   /**
    * Optional pre-seeded records. When provided, this map is used instead of
    * the disk-loaded install-record snapshot. Pass the in-memory records
@@ -85,6 +88,10 @@ export async function repairMissingConfiguredPluginInstalls(params: {
     blockedPluginIds: collectBlockedPluginIds(params.cfg),
     ...(params.acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
     ...(params.onClawHubRisk ? { onClawHubRisk: params.onClawHubRisk } : {}),
+    ...(params.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
+    ...(params.onInstallPolicyWarning
+      ? { onInstallPolicyWarning: params.onInstallPolicyWarning }
+      : {}),
     ...(params.baselineRecords ? { baselineRecords: params.baselineRecords } : {}),
   });
 }
@@ -99,6 +106,8 @@ export async function repairMissingPluginInstallsForIds(params: {
   baselineRecords?: Record<string, PluginInstallRecord>;
   acknowledgeClawHubRisk?: boolean;
   onClawHubRisk?: (request: ClawHubRiskAcknowledgementRequest) => boolean | Promise<boolean>;
+  acknowledgeInstallPolicyWarning?: boolean;
+  onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
 }): Promise<RepairMissingPluginInstallsResult> {
   return repairMissingPluginInstalls({
     cfg: params.cfg,
@@ -118,6 +127,10 @@ export async function repairMissingPluginInstallsForIds(params: {
     ),
     ...(params.acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
     ...(params.onClawHubRisk ? { onClawHubRisk: params.onClawHubRisk } : {}),
+    ...(params.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
+    ...(params.onInstallPolicyWarning
+      ? { onInstallPolicyWarning: params.onInstallPolicyWarning }
+      : {}),
     ...(params.baselineRecords ? { baselineRecords: params.baselineRecords } : {}),
   });
 }
@@ -131,6 +144,8 @@ async function repairMissingPluginInstalls(params: {
   baselineRecords?: Record<string, PluginInstallRecord>;
   acknowledgeClawHubRisk?: boolean;
   onClawHubRisk?: (request: ClawHubRiskAcknowledgementRequest) => boolean | Promise<boolean>;
+  acknowledgeInstallPolicyWarning?: boolean;
+  onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
 }): Promise<RepairMissingPluginInstallsResult> {
   const env = params.env ?? process.env;
   const {
@@ -245,6 +260,10 @@ async function repairMissingPluginInstalls(params: {
       },
       ...(params.acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
       ...(params.onClawHubRisk ? { onClawHubRisk: params.onClawHubRisk } : {}),
+      ...(params.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
+      ...(params.onInstallPolicyWarning
+        ? { onInstallPolicyWarning: params.onInstallPolicyWarning }
+        : {}),
     });
     for (const outcome of updateResult.outcomes) {
       if (outcome.status === "updated" || outcome.status === "unchanged") {
@@ -344,6 +363,10 @@ async function repairMissingPluginInstalls(params: {
         : {}),
       ...(params.acknowledgeClawHubRisk ? { acknowledgeClawHubRisk: true } : {}),
       ...(params.onClawHubRisk ? { onClawHubRisk: params.onClawHubRisk } : {}),
+      ...(params.acknowledgeInstallPolicyWarning ? { acknowledgeInstallPolicyWarning: true } : {}),
+      ...(params.onInstallPolicyWarning
+        ? { onInstallPolicyWarning: params.onInstallPolicyWarning }
+        : {}),
     });
     if (shouldReplaceBrokenOfficialInstall) {
       const installedRecord = installed.records[candidate.pluginId];

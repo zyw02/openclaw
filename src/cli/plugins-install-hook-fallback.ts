@@ -163,6 +163,7 @@ async function tryInstallHookPackFromNpmSpec(params: {
   installMode: "install" | "update";
   spec: string;
   pin?: boolean;
+  safetyOverrides?: InstallSafetyOverrides;
   expectedIntegrity?: string;
   expectedPackageKind?: "hook-only";
   runtime?: RuntimeEnv;
@@ -171,6 +172,7 @@ async function tryInstallHookPackFromNpmSpec(params: {
     return { ok: false, error: params.snapshot.hookMutation.reason };
   }
   const result = await installHooksFromNpmSpec({
+    ...resolveInstallSafetyOverrides(params.safetyOverrides ?? {}),
     config: params.snapshot.config,
     spec: params.spec,
     mode: params.installMode,
@@ -244,6 +246,7 @@ export async function tryInstallPluginOrHookPackFromNpmSpec(params: {
         installMode: params.installMode,
         spec: params.spec,
         pin: params.pin,
+        safetyOverrides: params.safetyOverrides,
         expectedIntegrity: hookProbe.npmResolution?.integrity ?? params.expectedIntegrity,
         expectedPackageKind: "hook-only",
         runtime: params.runtime,
@@ -304,9 +307,12 @@ export async function tryInstallPluginOrHookPackFromNpmSpec(params: {
             source: "bundled",
             rawSpec: params.spec,
             bundledSource: bundledFallbackPlan.bundledSource,
+            mode: params.installMode,
             warning: bundledFallbackPlan.warning,
           },
           snapshot: params.snapshot,
+          safetyOverrides: params.safetyOverrides,
+          logger: createPluginInstallLogger(params.runtime),
           invalidateRuntimeCache: params.invalidateRuntimeCache,
           runtime: params.runtime,
         });
@@ -322,6 +328,7 @@ export async function tryInstallPluginOrHookPackFromNpmSpec(params: {
       installMode: params.installMode,
       spec: params.spec,
       pin: params.pin,
+      safetyOverrides: params.safetyOverrides,
       expectedIntegrity: params.expectedIntegrity,
       runtime: params.runtime,
     });

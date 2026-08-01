@@ -965,6 +965,9 @@ describe("skill mutations", () => {
             ruleId: "dangerous-exec",
             severity: "warn",
             message: "The package launches a child process.",
+            file: "install.js",
+            line: 12,
+            evidence: "spawn(command, args)",
           },
         ],
       },
@@ -990,7 +993,10 @@ describe("skill mutations", () => {
 
     expect(state.skillMessages.github).toEqual({
       kind: "error",
-      message: "Manual review recommended.\n• The package launches a child process.",
+      message:
+        "Manual review recommended.\n" +
+        "• [WARN · dangerous-exec · install.js:12] The package launches a child process.\n" +
+        "  ↳ spawn(command, args)",
       acknowledgeInstallPolicyWarning: {
         name: "GitHub",
         installId: "install-123",
@@ -1134,6 +1140,16 @@ describe("skill mutations", () => {
     error.details = {
       installPolicyWarning: {
         reason: "Manual review recommended.",
+        findings: [
+          {
+            ruleId: "network-loader",
+            severity: "critical",
+            message: "The skill downloads executable code.",
+            file: "scripts/install.sh",
+            line: 8,
+            evidence: 'curl "$URL" | sh',
+          },
+        ],
       },
     };
     request.mockRejectedValue(error);
@@ -1142,7 +1158,10 @@ describe("skill mutations", () => {
 
     expect(state.clawhubInstallMessage).toEqual({
       kind: "error",
-      text: "Manual review recommended.",
+      text:
+        "Manual review recommended.\n" +
+        "• [CRITICAL · network-loader · scripts/install.sh:8] The skill downloads executable code.\n" +
+        '  ↳ curl "$URL" | sh',
       acknowledgeSlug: "github",
       acknowledgeVersion: "1.2.3",
       acknowledgeClawHubRisk: true,

@@ -1,14 +1,55 @@
-import { readInstallPolicyWarningDetails } from "../../../../packages/gateway-protocol/src/install-policy-warning-details.js";
+import { readClawHubTrustErrorDetails } from "../../../../packages/gateway-protocol/src/clawhub-trust-error-details.js";
 
-export type ClawHubInstallMessage = {
-  kind: "success" | "error";
+export { readInstallPolicyWarningText } from "../install-policy-warning.ts";
+
+export function readClawHubTrustDetailsFromError(error: unknown) {
+  if (!error || typeof error !== "object" || !("details" in error)) {
+    return undefined;
+  }
+  return readClawHubTrustErrorDetails((error as { details?: unknown }).details);
+}
+
+export const formatClawHubInstallMessage = (message: string, warning?: string): string =>
+  warning ? `${message}\n\n${warning}` : message;
+
+export function formatClawHubAcknowledgementMessage(warning?: string): string {
+  return formatClawHubInstallMessage(
+    "Review the ClawHub warning before installing this skill.",
+    warning,
+  );
+}
+
+type ClawHubInstallMessageBase = {
   text: string;
-  acknowledgeSlug?: string;
+};
+
+type ClawHubInstallMessageWithoutRetry = ClawHubInstallMessageBase & {
+  acknowledgeSlug?: never;
+  acknowledgeVersion?: never;
+  acknowledgeLabel?: never;
+  acknowledgeClawHubRisk?: never;
+  acknowledgeInstallPolicyWarning?: never;
+};
+
+type ClawHubInstallRetryMessage = ClawHubInstallMessageBase & {
+  kind: "error";
+  acknowledgeSlug: string;
   acknowledgeVersion?: string;
   acknowledgeLabel?: string;
-  acknowledgeClawHubRisk?: boolean;
-  acknowledgeInstallPolicyWarning?: boolean;
-};
+} & (
+    | {
+        acknowledgeClawHubRisk: true;
+        acknowledgeInstallPolicyWarning?: never;
+      }
+    | {
+        acknowledgeClawHubRisk?: true;
+        acknowledgeInstallPolicyWarning: true;
+      }
+  );
+
+export type ClawHubInstallMessage =
+  | (ClawHubInstallMessageWithoutRetry & { kind: "success" | "error" })
+  | ClawHubInstallRetryMessage;
 
 export type SkillMessage = {
   kind: "success" | "error";
@@ -18,17 +59,3 @@ export type SkillMessage = {
     installId: string;
   };
 };
-
-export function readInstallPolicyWarningText(error: unknown): string | undefined {
-  if (!error || typeof error !== "object" || !("details" in error)) {
-    return undefined;
-  }
-  const warning = readInstallPolicyWarningDetails(
-    (error as { details?: unknown }).details,
-  )?.installPolicyWarning;
-  if (!warning) {
-    return undefined;
-  }
-  const findings = (warning.findings ?? []).map((finding) => `• ${finding.message}`);
-  return [warning.reason, ...findings].join("\n");
-}

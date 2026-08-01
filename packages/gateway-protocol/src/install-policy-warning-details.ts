@@ -14,6 +14,39 @@ export type InstallPolicyWarningDetails = {
   };
 };
 
+function findingLocation(
+  finding: InstallPolicyWarningFinding,
+  formatText: (value: string) => string,
+): string | undefined {
+  if (finding.file) {
+    return `${formatText(finding.file)}${finding.line ? `:${finding.line}` : ""}`;
+  }
+  return finding.line ? `line ${finding.line}` : undefined;
+}
+
+function formatFinding(
+  finding: InstallPolicyWarningFinding,
+  formatText: (value: string) => string,
+): string {
+  const context = [
+    finding.severity.toUpperCase(),
+    formatText(finding.ruleId),
+    findingLocation(finding, formatText),
+  ].filter(Boolean);
+  const summary = `• [${context.join(" · ")}] ${formatText(finding.message)}`;
+  return finding.evidence ? `${summary}\n  ↳ ${formatText(finding.evidence)}` : summary;
+}
+
+export function formatInstallPolicyWarningDetails(
+  warning: InstallPolicyWarningDetails["installPolicyWarning"],
+  formatText: (value: string) => string = (value) => value,
+): string {
+  return [
+    formatText(warning.reason),
+    ...(warning.findings ?? []).map((finding) => formatFinding(finding, formatText)),
+  ].join("\n");
+}
+
 function normalizeNonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }

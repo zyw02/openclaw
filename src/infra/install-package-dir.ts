@@ -10,6 +10,7 @@ import { movePathWithCopyFallback } from "./replace-file.js";
 import { createSafeNpmInstallArgs, createSafeNpmInstallEnv } from "./safe-package-install.js";
 
 type InstallSourceHardlinks = "package-manager" | "reject";
+type InstallPackageDirFailure = { ok: false; error: string; code?: string };
 
 const DEFAULT_INSTALL_SOURCE_HARDLINKS: InstallSourceHardlinks = "reject";
 const INSTALL_BASE_CHANGED_ERROR_MESSAGE = "install base directory changed during install";
@@ -168,7 +169,9 @@ async function resolveInstallPublishTarget(params: {
  * Update mode backs up the existing target, runs optional validation hooks,
  * and rolls back when copy, dependency install, or validation fails.
  */
-export async function installPackageDir(params: {
+export async function installPackageDir<
+  TAfterInstallFailure extends InstallPackageDirFailure = InstallPackageDirFailure,
+>(params: {
   sourceDir: string;
   targetDir: string;
   mode: "install" | "update";
@@ -179,10 +182,8 @@ export async function installPackageDir(params: {
   sourceHardlinks?: InstallSourceHardlinks;
   depsLogMessage: string;
   afterCopy?: (installedDir: string) => void | Promise<void>;
-  afterInstall?: (
-    installedDir: string,
-  ) => Promise<{ ok: true } | { ok: false; error: string; code?: string }>;
-}): Promise<{ ok: true } | { ok: false; error: string; code?: string }> {
+  afterInstall?: (installedDir: string) => Promise<{ ok: true } | TAfterInstallFailure>;
+}): Promise<{ ok: true } | InstallPackageDirFailure | TAfterInstallFailure> {
   params.logger?.info?.(`Installing to ${params.targetDir}…`);
   const installBaseDir = path.dirname(params.targetDir);
   let initialInstallBaseRealPath: string;
@@ -231,9 +232,9 @@ export async function installPackageDir(params: {
     }
     return { ok: false as const, error };
   };
-  const failWithCode = async (paramsLocal: { error: string; code?: string }, cause?: unknown) => {
-    const failed = await fail(paramsLocal.error, cause);
-    return paramsLocal.code ? { ...failed, code: paramsLocal.code } : failed;
+  const failAfterInstall = async (failure: TAfterInstallFailure, cause?: unknown) => {
+    await fail(failure.error, cause);
+    return failure;
   };
   const restoreBackup = async () => {
     if (!backupDir) {
@@ -306,7 +307,7 @@ export async function installPackageDir(params: {
     try {
       const postInstallResult = await params.afterInstall(stageDir);
       if (!postInstallResult.ok) {
-        return await failWithCode(postInstallResult);
+        return await failAfterInstall(postInstallResult);
       }
     } catch (err) {
       return await fail(`post-install validation failed: ${String(err)}`, err);
@@ -378,7 +379,9 @@ export async function installPackageDir(params: {
  * Installs a manifest-backed package directory while deriving whether npm
  * dependencies must be installed and which hardlink policy is safe to use.
  */
-export async function installPackageDirWithManifestDeps(params: {
+export async function installPackageDirWithManifestDeps<
+  TAfterInstallFailure extends InstallPackageDirFailure = InstallPackageDirFailure,
+>(params: {
   sourceDir: string;
   targetDir: string;
   mode: "install" | "update";
@@ -388,10 +391,8 @@ export async function installPackageDirWithManifestDeps(params: {
   depsLogMessage: string;
   manifestDependencies?: Record<string, unknown>;
   afterCopy?: (installedDir: string) => void | Promise<void>;
-  afterInstall?: (
-    installedDir: string,
-  ) => Promise<{ ok: true } | { ok: false; error: string; code?: string }>;
-}): Promise<{ ok: true } | { ok: false; error: string; code?: string }> {
+  afterInstall?: (installedDir: string) => Promise<{ ok: true } | TAfterInstallFailure>;
+}): Promise<{ ok: true } | InstallPackageDirFailure | TAfterInstallFailure> {
   const hasDeps = Object.keys(params.manifestDependencies ?? {}).length > 0;
   return installPackageDir({
     ...params,

@@ -21,12 +21,20 @@ import {
   SkillsProposalEventsListResultSchema,
   SkillsProposalInspectResultSchema,
   SkillsProposalRequestRevisionResultSchema,
+  SkillsUpdateParamsSchema,
   ToolsEffectiveResultSchema,
   ToolsInvokeParamsSchema,
 } from "./agents-models-skills.js";
 
 describe("SkillsInstallParamsSchema", () => {
   it("accepts request-scoped install-policy acknowledgement", () => {
+    expect(
+      Value.Check(SkillsInstallParamsSchema, {
+        name: "weather",
+        installId: "node",
+        acknowledgeInstallPolicyWarning: true,
+      }),
+    ).toBe(true);
     expect(
       Value.Check(SkillsInstallParamsSchema, {
         source: "clawhub",
@@ -42,6 +50,32 @@ describe("SkillsInstallParamsSchema", () => {
         acknowledgeInstallPolicyWarning: true,
       }),
     ).toBe(true);
+    expect(
+      Value.Check(SkillsInstallParamsSchema, {
+        name: "weather",
+        installId: "node",
+        acknowledgeInstallPolicyWarning: "yes",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("SkillsUpdateParamsSchema", () => {
+  it("accepts a request-scoped install-policy acknowledgement for ClawHub updates", () => {
+    expect(
+      Value.Check(SkillsUpdateParamsSchema, {
+        source: "clawhub",
+        slug: "weather",
+        acknowledgeInstallPolicyWarning: true,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(SkillsUpdateParamsSchema, {
+        source: "clawhub",
+        slug: "weather",
+        acknowledgeInstallPolicyWarning: "yes",
+      }),
+    ).toBe(false);
   });
 });
 

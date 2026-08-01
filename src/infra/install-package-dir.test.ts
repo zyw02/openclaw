@@ -277,6 +277,46 @@ describe("installPackageDir", () => {
     ).resolves.toHaveLength(0);
   });
 
+  it("preserves structured staged-validation failures while rolling back", async () => {
+    await fixtureRootTracker.setup();
+    const fixtureRoot = await fixtureRootTracker.make("structured-failure");
+    const { sourceDir, targetDir } = await createExistingInstallFixture(fixtureRoot);
+    const warning = {
+      reason: "Manual review recommended.",
+      findings: [
+        {
+          ruleId: "dangerous-exec",
+          severity: "warn",
+          message: "The package launches a child process.",
+        },
+      ],
+    };
+
+    const result = await installPackageDir({
+      sourceDir,
+      targetDir,
+      mode: "update",
+      timeoutMs: 1_000,
+      copyErrorPrefix: "failed to copy plugin",
+      hasDeps: false,
+      depsLogMessage: "Installing deps…",
+      afterInstall: async () => ({
+        ok: false as const,
+        error: warning.reason,
+        code: "install_policy_acknowledgement_required",
+        installPolicyWarning: warning,
+      }),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: warning.reason,
+      code: "install_policy_acknowledgement_required",
+      installPolicyWarning: warning,
+    });
+    await expect(fs.readFile(path.join(targetDir, "marker.txt"), "utf8")).resolves.toBe("old");
+  });
+
   it("restores the original install if publish rename fails", async () => {
     await fixtureRootTracker.setup();
     const fixtureRoot = await fixtureRootTracker.make("case");

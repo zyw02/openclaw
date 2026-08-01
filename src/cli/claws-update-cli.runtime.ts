@@ -14,6 +14,7 @@ import { defaultRuntime, writeRuntimeJson, type RuntimeEnv } from "../runtime.js
 import { openExistingOpenClawStateDatabaseReadOnly } from "../state/openclaw-state-db.js";
 import { logClawUpdatePlanSummary } from "./claws-cli-update-output.js";
 import type { ClawsUpdateOptions } from "./claws-cli.js";
+import { resolveClawInstallPolicyOptions } from "./claws-install-policy.js";
 import { callGatewayFromCli } from "./gateway-rpc.js";
 
 type DiagnosticLike = { level: string; code: string; path: string; message: string };
@@ -195,6 +196,11 @@ export async function runClawsUpdateCommand(
   }
 
   try {
+    const installPolicyOptions = resolveClawInstallPolicyOptions({
+      action: "update",
+      dangerouslyForceUnsafeInstall: opts.dangerouslyForceUnsafeInstall,
+      json: opts.json,
+    });
     const result = await applyClawUpdatePlan(
       plan,
       {
@@ -207,6 +213,7 @@ export async function runClawsUpdateCommand(
         config,
         sourceMcpServers: listedMcpServers.mcpServers,
         consentPlanIntegrity: opts.planIntegrity,
+        ...installPolicyOptions,
         packagePreflight: preflightClawPackage,
         cronGateway: {
           add: async (input) => await callGatewayFromCli("cron.add", {}, input),

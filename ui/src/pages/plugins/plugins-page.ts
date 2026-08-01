@@ -30,6 +30,7 @@ import {
   type McpServerSummary,
   type McpServersPatchBuildResult,
 } from "../../lib/config/mcp-servers.ts";
+import { formatInstallPolicyWarning } from "../../lib/install-policy-warning.ts";
 import {
   installPlugin,
   readPluginInstallPolicyWarning,
@@ -812,12 +813,9 @@ class PluginsPage extends OpenClawLightDomElement {
         const trust = readPluginInstallTrustError(error);
         const installPolicyWarning = readPluginInstallPolicyWarning(error);
         if (installPolicyWarning) {
-          const findingText = (installPolicyWarning.findings ?? [])
-            .map((finding) => `• ${finding.message}`)
-            .join("\n");
           this.setMessage(rowKey, {
             kind: "error",
-            text: [installPolicyWarning.reason, findingText].filter(Boolean).join("\n"),
+            text: formatInstallPolicyWarning(installPolicyWarning),
             acknowledge: {
               ...request,
               acknowledgeInstallPolicyWarning: true,

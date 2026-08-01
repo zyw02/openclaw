@@ -2,6 +2,7 @@ import { runPluginInstallCommand } from "../cli/plugins-install-command.js";
 import { runPluginUninstallCommand } from "../cli/plugins-uninstall-command.js";
 import { normalizeClawHubSha256Integrity } from "../infra/clawhub.js";
 import { installPluginFromClawHub } from "../plugins/clawhub.js";
+import type { InstallPolicyWarning } from "../plugins/install-security-scan.js";
 import type { PluginManifestSetup } from "../plugins/manifest.js";
 import {
   preflightPluginInstall,
@@ -268,6 +269,8 @@ type InstallClawPackagesOptions = OpenClawStateDatabaseOptions & {
   runtime?: RuntimeEnv;
   nowMs?: number;
   onExternalMutation?: (pkg: ClawPackage) => void;
+  acknowledgeInstallPolicyWarning?: boolean;
+  onInstallPolicyWarning?: (warning: InstallPolicyWarning) => boolean | Promise<boolean>;
 };
 
 export async function installClawPackages(
@@ -309,6 +312,17 @@ async function installClawPackagesUnlocked(
   const runtime = options.runtime ?? defaultRuntime;
   const installedPackages: PersistedClawPackageRef[] = [];
   const installedPlugins: Array<{ installId: string; packageIndex: number }> = [];
+  let installPolicyWarningRejected = false;
+  const onInstallPolicyWarning =
+    options.acknowledgeInstallPolicyWarning === true
+      ? undefined
+      : async (warning: InstallPolicyWarning) => {
+          const acknowledged = (await options.onInstallPolicyWarning?.(warning)) === true;
+          if (!acknowledged) {
+            installPolicyWarningRejected = true;
+          }
+          return acknowledged;
+        };
 
   for (const action of plan.actions.filter((candidate) => candidate.kind === "package")) {
     let packageLease: MaintainedClawPackageLifecycleLease | null = null;
@@ -385,6 +399,10 @@ async function installClawPackagesUnlocked(
           version: pkg.version,
           expectedIntegrity: pkg.integrity,
           acknowledgeClawHubRisk: true,
+          ...(options.acknowledgeInstallPolicyWarning === true
+            ? { acknowledgeInstallPolicyWarning: true }
+            : {}),
+          ...(onInstallPolicyWarning ? { onInstallPolicyWarning } : {}),
           clawManaged: true,
         });
         packageLease.assertCurrent();
@@ -501,6 +519,10 @@ async function installClawPackagesUnlocked(
           acknowledgeClawHubRisk: true,
           expectedIntegrity: pkg.integrity,
           expectedPluginId: pkg.installId,
+          ...(options.acknowledgeInstallPolicyWarning === true
+            ? { acknowledgeInstallPolicyWarning: true }
+            : {}),
+          ...(onInstallPolicyWarning ? { onInstallPolicyWarning } : {}),
         },
         invalidateRuntimeCache: false,
         clawManaged: true,
@@ -622,7 +644,10 @@ async function installClawPackagesUnlocked(
           }
         }
       }
-      const message = error instanceof Error ? error.message : String(error);
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      const message = installPolicyWarningRejected
+        ? `${rawMessage} After reviewing the findings, rerun the command with --dangerously-force-unsafe-install from a trusted shell to continue.`
+        : rawMessage;
       if (rollbackErrors.length > 0) {
         throw new ClawPackageInstallError(
           "package_rollback_failed",

@@ -48,7 +48,9 @@ type UploadedSkillInstallResult =
 function uploadInstallFailureErrorKind(
   failureKind: SkillArchiveInstallFailureKind,
 ): UploadedSkillInstallErrorKind {
-  return failureKind === "invalid-request" ? "invalid-request" : "unavailable";
+  return failureKind === "invalid-request" || failureKind === "acknowledgement-required"
+    ? "invalid-request"
+    : "unavailable";
 }
 
 export async function installUploadedSkillArchive(params: {

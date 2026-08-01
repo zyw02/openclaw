@@ -9031,6 +9031,22 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
   - H2: Evidence to keep
   - H2: Workflow files
 
+## reference/install-policy-manual-proof.md
+
+- Route: /reference/install-policy-manual-proof
+- Headings:
+  - H1: Install policy manual proof
+  - H2: Verified result
+  - H2: Prerequisites
+  - H2: Build the merged ClawScan adapter
+  - H2: Prepare the native fixtures and complete OpenClaw config
+  - H2: Prove allow
+  - H2: Prove visible pause and no pre-acknowledgement commit
+  - H2: Prove acknowledgement, policy re-evaluation, and multi-stage commit
+  - H2: Prove block remains terminal
+  - H2: Optional BYOS composition smoke
+  - H2: Cleanup
+
 ## reference/memory-config.md
 
 - Route: /reference/memory-config
