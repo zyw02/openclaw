@@ -295,13 +295,18 @@ added, and ClawScan's Docker sandbox remains enabled.
 
 The verified image used:
 
-- base:
+- Semgrep base, including its resolved Python dependency closure:
+  `semgrep/semgrep@sha256:c98f8829eea377274ee4b10656458b078b88232469b2ff913f091c2317347c9d`;
+- TruffleHog copy stage:
   `ghcr.io/trufflesecurity/trufflehog@sha256:59b244249d1a1aef4baa24fe73d3c931616264482580d806d77f6c74d26b3e42`;
 - local combined image ID:
-  `sha256:39251e78900dfb8b7c9da9284995eed5b966e2a3e3f49d22b7f16302d3c0ca3c`;
+  `sha256:8d5b176574c95603e2214061b42013f1555a9ef8a035d1acc8eff01059cd7659`;
 - Semgrep `1.170.0`;
 - TruffleHog `3.95.9`;
 - Python `3.12.13`.
+
+Both scanner dependency closures therefore come from immutable container image
+digests; the proof build does not resolve Python packages from PyPI.
 
 Prepare and build:
 
