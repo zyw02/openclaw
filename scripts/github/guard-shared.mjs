@@ -1,9 +1,11 @@
 import { setTimeout as wait } from "node:timers/promises";
 import { readBoundedResponseText } from "../lib/bounded-response.mjs";
+import { isOctopoolReadPath } from "./octopool-read.mjs";
 
 export const GITHUB_ERROR_BODY_MAX_BYTES = 64 * 1024;
 export const GITHUB_RESPONSE_BODY_MAX_BYTES = 4 * 1024 * 1024;
 export const GITHUB_API_REQUEST_TIMEOUT_MS = 30_000;
+export const GITHUB_PAGINATION_MAX_PAGES = 100;
 
 const githubApiRetryStatuses = new Set([502, 503, 504]);
 const githubApiRetryDelaysMs = [1_000, 2_000, 4_000];
@@ -231,11 +233,72 @@ function combineAbortSignals(signals) {
   return AbortSignal.any(activeSignals);
 }
 
+function queryEntries(query) {
+  if (query === undefined) {
+    return [];
+  }
+  if (!query || typeof query !== "object" || Array.isArray(query)) {
+    throw new Error("GitHub API query must be an object.");
+  }
+  const entries = [];
+  for (const [key, value] of Object.entries(query)) {
+    for (const entry of Array.isArray(value) ? value : [value]) {
+      if (typeof entry !== "string") {
+        throw new Error(`GitHub API query value for ${key} must be a string.`);
+      }
+      entries.push([key, entry]);
+    }
+  }
+  return entries;
+}
+
+function splitGitHubPath(path, query) {
+  if (typeof path !== "string" || !path.startsWith("/")) {
+    throw new Error(`GitHub API path must be relative: ${path}`);
+  }
+  const url = new URL(path, "https://api.github.com");
+  if (url.origin !== "https://api.github.com") {
+    throw new Error(`GitHub API path must be relative: ${path}`);
+  }
+  const entriesByKey = new Map();
+  for (const [key, value] of queryEntries(query)) {
+    const entries = entriesByKey.get(key) ?? [];
+    entries.push(value);
+    entriesByKey.set(key, entries);
+  }
+  for (const [key, values] of entriesByKey) {
+    url.searchParams.delete(key);
+    for (const value of values) {
+      url.searchParams.append(key, value);
+    }
+  }
+  const normalizedQuery = {};
+  for (const [key, value] of url.searchParams.entries()) {
+    const existing = normalizedQuery[key];
+    normalizedQuery[key] =
+      existing === undefined ? value : [...(Array.isArray(existing) ? existing : [existing]), value];
+  }
+  return {
+    path: url.pathname,
+    query: Object.keys(normalizedQuery).length > 0 ? normalizedQuery : undefined,
+  };
+}
+
+function formatGitHubQuery(query) {
+  const parameters = new URLSearchParams();
+  for (const [key, value] of queryEntries(query)) {
+    parameters.append(key, value);
+  }
+  return parameters.toString();
+}
+
 export function createGitHubApi(token, options = {}) {
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? GITHUB_API_REQUEST_TIMEOUT_MS;
   const retryDelaysMs = options.retryDelaysMs ?? githubApiRetryDelaysMs;
   const responseMaxBodyBytes = options.responseMaxBodyBytes ?? GITHUB_RESPONSE_BODY_MAX_BYTES;
+  const maxPages = options.maxPages ?? GITHUB_PAGINATION_MAX_PAGES;
+  const readTransport = options.readTransport;
   const baseHeaders = {
     accept: "application/vnd.github+json",
     authorization: `Bearer ${token}`,
@@ -244,6 +307,10 @@ export function createGitHubApi(token, options = {}) {
   };
   const request = async (path, requestOptions = {}) => {
     const method = (requestOptions.method ?? "GET").toUpperCase();
+    const { query, routeHint, ...fetchOptions } = requestOptions;
+    const normalized = splitGitHubPath(path, query);
+    const useReadTransport =
+      method === "GET" && readTransport && isOctopoolReadPath(normalized.path);
     const timeoutController = new AbortController();
     const requestSignal = combineAbortSignals([requestOptions.signal, timeoutController.signal]);
     let timeout;
@@ -256,10 +323,31 @@ export function createGitHubApi(token, options = {}) {
     });
     const operationPromise = (async () => {
       for (let attempt = 0; ; attempt += 1) {
-        const response = await fetchImpl(`https://api.github.com${path}`, {
-          ...requestOptions,
+        if (useReadTransport) {
+          try {
+            return await readTransport.get(normalized.path, {
+              query: normalized.query,
+              routeHint,
+              signal: requestSignal,
+            });
+          } catch (error) {
+            if (
+              githubApiRetryStatuses.has(error?.status) &&
+              attempt < retryDelaysMs.length
+            ) {
+              await wait(retryDelaysMs[attempt], undefined, { signal: requestSignal });
+              continue;
+            }
+            throw error;
+          }
+        }
+        const queryString = formatGitHubQuery(normalized.query);
+        const response = await fetchImpl(`https://api.github.com${normalized.path}${
+          queryString ? `?${queryString}` : ""
+        }`, {
+          ...fetchOptions,
           signal: requestSignal,
-          headers: { ...baseHeaders, ...requestOptions.headers },
+          headers: { ...baseHeaders, ...fetchOptions.headers },
         });
         if (response.status === 204) {
           return null;
@@ -302,16 +390,22 @@ export function createGitHubApi(token, options = {}) {
   };
   return {
     request,
-    paginate: async (path) => {
+    paginate: async (path, paginateOptions = {}) => {
       const items = [];
-      for (let page = 1; ; page += 1) {
-        const separator = path.includes("?") ? "&" : "?";
-        const pageItems = await request(`${path}${separator}per_page=100&page=${page}`);
+      for (let page = 1; page <= maxPages; page += 1) {
+        const pageItems = await request(path, {
+          ...paginateOptions,
+          query: { ...paginateOptions.query, per_page: "100", page: String(page) },
+        });
+        if (!Array.isArray(pageItems)) {
+          throw new Error(`GitHub API returned a non-array page for ${path}.`);
+        }
         items.push(...pageItems);
         if (pageItems.length < 100) {
           return items;
         }
       }
+      throw new Error(`GitHub API pagination exceeded ${maxPages} pages for ${path}.`);
     },
   };
 }

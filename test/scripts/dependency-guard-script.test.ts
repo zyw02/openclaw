@@ -684,6 +684,70 @@ describe("dependency guard script", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it("relays only allowlisted guard GETs and keeps writes on the native client", async () => {
+    const readTransport = { get: vi.fn().mockResolvedValue({ number: 1 }) };
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));
+    const api = githubApi("token", { fetchImpl, readTransport });
+
+    await expect(api.request("/repos/openclaw/openclaw/pulls/1")).resolves.toEqual({
+      number: 1,
+    });
+    await expect(
+      api.request("/repos/openclaw/openclaw/issues/1/comments", { method: "POST", body: "{}" }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(readTransport.get).toHaveBeenCalledWith("/repos/openclaw/openclaw/pulls/1", {
+      query: undefined,
+      routeHint: undefined,
+      signal: expect.any(AbortSignal),
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://api.github.com/repos/openclaw/openclaw/issues/1/comments",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("passes the immutable head SHA to relay-backed PR file pagination", async () => {
+    const readTransport = {
+      get: vi
+        .fn()
+        .mockResolvedValueOnce(Array.from({ length: 100 }, () => ({ filename: "a.ts" })))
+        .mockResolvedValueOnce([]),
+    };
+    const api = githubApi("token", { readTransport });
+
+    await expect(
+      api.paginate("/repos/openclaw/openclaw/pulls/1/files", {
+        routeHint: { pr_head_sha: headSha },
+      }),
+    ).resolves.toHaveLength(100);
+    expect(readTransport.get).toHaveBeenNthCalledWith(
+      1,
+      "/repos/openclaw/openclaw/pulls/1/files",
+      {
+        query: { page: "1", per_page: "100" },
+        routeHint: { pr_head_sha: headSha },
+        signal: expect.any(AbortSignal),
+      },
+    );
+  });
+
+  it("retries transient relay failures without falling back to native GitHub reads", async () => {
+    const unavailable = Object.assign(new Error("unavailable"), { status: 503 });
+    const readTransport = {
+      get: vi.fn().mockRejectedValueOnce(unavailable).mockResolvedValueOnce({ number: 1 }),
+    };
+    const fetchImpl = vi.fn<typeof fetch>();
+
+    await expect(
+      githubApi("token", { fetchImpl, readTransport, retryDelaysMs: [0] }).request(
+        "/repos/openclaw/openclaw/pulls/1",
+      ),
+    ).resolves.toEqual({ number: 1 });
+    expect(readTransport.get).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("does not retry non-idempotent GitHub API requests", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

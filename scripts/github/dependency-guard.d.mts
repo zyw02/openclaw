@@ -97,10 +97,23 @@ export function githubApi(
   token: string,
   options?: {
     fetchImpl?: typeof fetch;
+    readTransport?: {
+      get(
+        path: string,
+        options?: {
+          query?: Record<string, string | string[]>;
+          routeHint?: { pr_head_sha: string };
+          signal?: AbortSignal;
+        },
+      ): Promise<unknown>;
+    };
     responseMaxBodyBytes?: number;
     retryDelaysMs?: readonly number[];
     timeoutMs?: number;
   },
-): { request(path: string, options?: Record<string, unknown>): Promise<unknown> };
+): {
+  request(path: string, options?: Record<string, unknown>): Promise<unknown>;
+  paginate(path: string, options?: Record<string, unknown>): Promise<unknown[]>;
+};
 export function createAutoscrubCommit(...args: unknown[]): Promise<unknown>;
 export function readBoundedGitHubErrorText(...args: unknown[]): Promise<string>;
