@@ -216,6 +216,34 @@ describe("install security scan official bypass", () => {
     expect(runInstallPolicyMock).toHaveBeenCalledTimes(2);
   });
 
+  it("sanitizes policy-controlled warning logs while preserving structured details", async () => {
+    const warnings: string[] = [];
+    const reason = "scanner says \u001b[31mdanger\u001b[0m\nreview required";
+    const findings = [
+      {
+        ruleId: "dangerous-exec",
+        severity: "warn" as const,
+        message: "launches \u001b[2Jprocess\nwith shell",
+        file: "plugin\u001b[31m.js",
+        line: 7,
+      },
+    ];
+    runInstallPolicyMock.mockResolvedValue({ decision: "warn", reason, findings });
+
+    const result = await scanBundleInstallSourceRuntime({
+      logger: { warn: (message) => warnings.push(message) },
+      pluginId: "third-party",
+      source: { kind: "npm", authority: "official", mutable: false, network: true },
+      sourceDir: "/tmp/third-party",
+    });
+
+    expect(result).toEqual({ warning: { reason, findings } });
+    expect(warnings).toEqual([
+      "Install policy: launches process\\nwith shell (plugin.js:7)",
+      "Install policy warning: scanner says danger\\nreview required",
+    ]);
+  });
+
   it("reruns policy after interactive acknowledgement", async () => {
     runInstallPolicyMock.mockResolvedValue({
       decision: "warn",

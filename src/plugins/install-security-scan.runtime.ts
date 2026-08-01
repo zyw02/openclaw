@@ -1,6 +1,7 @@
 // Runtime bridge for plugin install security scanning.
 import fs from "node:fs/promises";
 import path from "node:path";
+import { sanitizeTerminalText } from "../../packages/terminal-core/src/safe-text.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { formatErrorMessage } from "../infra/errors.js";
 import { tryReadJson } from "../infra/json-files.js";
@@ -43,7 +44,7 @@ function formatInstallPolicyWarning(finding: InstallPolicyFinding): string {
   const location = finding.file
     ? ` (${finding.file}${finding.line ? `:${finding.line}` : ""})`
     : "";
-  return `Install policy: ${finding.message}${location}`;
+  return sanitizeTerminalText(`Install policy: ${finding.message}${location}`);
 }
 
 type InstallScanFinding = {
@@ -910,7 +911,7 @@ async function runOperatorInstallPolicy(params: {
       reason: result.reason,
       ...(result.findings?.length ? { findings: result.findings } : {}),
     };
-    params.logger.warn?.(`Install policy warning: ${result.reason}`);
+    params.logger.warn?.(sanitizeTerminalText(`Install policy warning: ${result.reason}`));
     if (params.acknowledgeInstallPolicyWarning === true) {
       return undefined;
     }
