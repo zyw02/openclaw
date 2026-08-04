@@ -168,6 +168,7 @@ function createCodeModeExecDescription(
     mcpGuidance +
     swarmGuidance +
     nodesGuidance +
+    " Pause between operations with `await sleep(ms)` (bounded, max 8000ms)." +
     skillsGuidance +
     ' The `language` field accepts only "javascript" or "typescript"; do not pass "bash", "shell", or other values.' +
     " The `code` field contains JavaScript or TypeScript, never a shell command. " +

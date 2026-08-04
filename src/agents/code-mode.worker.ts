@@ -108,6 +108,7 @@ function createHostRequestHandler(params: {
       method !== "call" &&
       method !== "callValue" &&
       method !== "nodes" &&
+      method !== "sleep" &&
       method !== "yield" &&
       method !== "namespace" &&
       method !== "agentSpawn" &&

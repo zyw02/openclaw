@@ -522,8 +522,17 @@ declare const namespaces: Record<string, unknown>;
 
 declare function text(value: unknown): void;
 declare function json(value: unknown): void;
+declare function sleep(ms: number): Promise<void>;
 declare function yield_control(reason?: string): Promise<void>;
 ```
+
+`sleep(ms)` pauses guest execution for `ms` milliseconds. The bound is capped at
+8,000ms (8 seconds) to stay within the default execution deadline. Use
+`await sleep(n)` between tool calls that need wall-clock time to settle — for
+example, after writing to a terminal session before reading its output. Under normal execution with sufficient remaining deadline, the pause resolves
+inline within the same `exec` auto-drain loop with no extra model round-trip.
+Replay-safe runs skip inline draining and return `waiting`; callers may need a
+`wait` tool call to collect the settled result.
 
 `ALL_TOOLS` is compact metadata for the run-scoped catalog; it does not contain
 full schemas by default. The model-visible `exec` description also includes a

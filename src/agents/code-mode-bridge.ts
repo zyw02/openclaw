@@ -448,6 +448,38 @@ export async function runBridgeRequest(params: {
         value = await runNodesBridge(params);
         break;
       }
+      case "sleep": {
+        const ms = values[0];
+        if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) {
+          throw new ToolInputError("sleep ms must be a non-negative finite number.");
+        }
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let onAbort: (() => void) | undefined;
+        try {
+          await new Promise<void>((resolve, reject) => {
+            timer = setTimeout(() => resolve(), Math.min(ms, 8_000));
+            if (params.signal) {
+              onAbort = () => {
+                reject(new DOMException("aborted", "AbortError"));
+              };
+              if (params.signal.aborted) {
+                reject(new DOMException("aborted", "AbortError"));
+                return;
+              }
+              params.signal.addEventListener("abort", onAbort, { once: true });
+            }
+          });
+          value = null;
+        } finally {
+          if (timer) {
+            clearTimeout(timer);
+          }
+          if (onAbort && params.signal) {
+            params.signal.removeEventListener("abort", onAbort);
+          }
+        }
+        break;
+      }
       case "yield": {
         value = { status: "yielded", reason: values[0] ?? null };
         break;

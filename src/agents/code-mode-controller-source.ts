@@ -221,6 +221,18 @@ export const CODE_MODE_CONTROLLER_SOURCE = String.raw`
     });
   }
 
+  // Aligned with the default exec deadline (10 000 ms) so a single
+  // sleep never parks the VM past the inline auto-drain budget.
+  const SLEEP_MAX_MS = 8_000;
+
+  function sleep(ms) {
+    const num = Number(ms);
+    if (!Number.isFinite(num) || num < 0) {
+      throw new Error("sleep ms must be a non-negative finite number");
+    }
+    return request("sleep", [Math.min(num, SLEEP_MAX_MS)]);
+  }
+
   Object.defineProperties(globalThis, {
     ALL_TOOLS: { value: Object.freeze(catalog.slice()), enumerable: true },
     API: { value: api, enumerable: true },
@@ -230,6 +242,7 @@ export const CODE_MODE_CONTROLLER_SOURCE = String.raw`
     tools: { value: Object.freeze(baseTools), enumerable: true },
     text: { value: (value) => output.push({ type: "text", text: asText(value) }), enumerable: true },
     json: { value: (value) => output.push({ type: "json", value: safe(value) }), enumerable: true },
+    sleep: { value: sleep, enumerable: true },
     yield_control: { value: (reason) => request("yield", [reason]), enumerable: true },
     __openclawSettleBridge: { value: settle },
     __openclawTakeOutput: { value: () => output.splice(0) },

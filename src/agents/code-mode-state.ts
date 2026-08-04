@@ -252,6 +252,7 @@ export function pendingBridgeRequestsReplaySafe(
     if (
       request.method === "search" ||
       request.method === "describe" ||
+      request.method === "sleep" ||
       request.method === "yield" ||
       request.method === "agentSpawn" ||
       request.method === "agentWait" ||

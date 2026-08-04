@@ -857,4 +857,98 @@ describe("Code Mode guest execution", () => {
     expect(details.status).toBe("failed");
     expect(String(details.error)).toContain("module access is disabled");
   });
+
+  it("exposes sleep(ms) for time-based pauses between tool calls", async () => {
+    const { config, catalogRef, tools: codeModeTools } = createCodeModeHarness();
+    applyCodeModeCatalog({
+      tools: [...codeModeTools, pluginTool("fake_noop", "Noop")],
+      config,
+      sessionId: "session-code-mode",
+      sessionKey: "agent:main:main",
+      runId: "run-code-mode",
+      catalogRef,
+    });
+
+    const details = await runUntilCompleted({
+      execTool: expectDefined(codeModeTools[0], "codeModeTools[0] test invariant"),
+      waitTool: expectDefined(codeModeTools[1], "codeModeTools[1] test invariant"),
+      code: `
+        const start = Date.now();
+        await sleep(50);
+        return Date.now() - start >= 30;
+      `,
+    });
+
+    expect(details).toMatchObject({ status: "completed", value: true });
+  });
+
+  it("reports sleep for the model in the exec tool description", async () => {
+    const { tools: codeModeTools } = createCodeModeHarness();
+    const execTool = expectDefined(codeModeTools[0], "exec tool");
+    expect(execTool.description).toContain("sleep(ms)");
+  });
+
+  it("rejects sleep with non-finite ms", async () => {
+    const { config, catalogRef, tools: codeModeTools } = createCodeModeHarness();
+    applyCodeModeCatalog({
+      tools: [...codeModeTools, pluginTool("fake_noop", "Noop")],
+      config,
+      sessionId: "session-code-mode",
+      sessionKey: "agent:main:main",
+      runId: "run-code-mode",
+      catalogRef,
+    });
+
+    const details = resultDetails(
+      await expectDefined(codeModeTools[0], "codeModeTools[0] test invariant").execute(
+        "code-call-sleep-bad",
+        { code: "await sleep(NaN); return 'ok';" },
+      ),
+    );
+
+    expect(details.status).toBe("failed");
+    expect(String(details.error)).toContain("sleep ms");
+  });
+
+  it("round-trips sleep(0) without error", async () => {
+    const { config, catalogRef, tools: codeModeTools } = createCodeModeHarness();
+    applyCodeModeCatalog({
+      tools: [...codeModeTools, pluginTool("fake_noop", "Noop")],
+      config,
+      sessionId: "session-code-mode",
+      sessionKey: "agent:main:main",
+      runId: "run-code-mode",
+      catalogRef,
+    });
+
+    const details = await runUntilCompleted({
+      execTool: expectDefined(codeModeTools[0], "codeModeTools[0] test invariant"),
+      waitTool: expectDefined(codeModeTools[1], "codeModeTools[1] test invariant"),
+      code: "await sleep(0); return 'ok';",
+    });
+
+    expect(details).toMatchObject({ status: "completed", value: "ok" });
+  });
+
+  it("makes sleep(ms) replay-safe", async () => {
+    const { config, catalogRef, tools: codeModeTools } = createCodeModeHarness();
+    applyCodeModeCatalog({
+      tools: [...codeModeTools, pluginTool("fake_noop", "Noop")],
+      config,
+      sessionId: "session-code-mode",
+      sessionKey: "agent:main:main",
+      runId: "run-code-mode",
+      catalogRef,
+    });
+
+    const details = await runUntilCompleted({
+      execTool: expectDefined(codeModeTools[0], "codeModeTools[0] test invariant"),
+      waitTool: expectDefined(codeModeTools[1], "codeModeTools[1] test invariant"),
+      code: "await sleep(10); return 'ok';",
+      restartSafe: true,
+    });
+
+    // Sleep must be replay-safe; restart-safe runs should not fail.
+    expect(details).toMatchObject({ status: "completed", value: "ok" });
+  });
 });
